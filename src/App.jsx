@@ -5,12 +5,13 @@ import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/1
 
 // ─── Firebase ─────────────────────────────────────────────────────────────────
 const firebaseConfig = {
-  apiKey: "AIzaSyBXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",   // ← REPLACE with your hallarc config
+  apiKey: "AIzaSyATdyW05921fNz_wyZ3zjYVF4o44mm_tyg",
   authDomain: "hallarc.firebaseapp.com",
   projectId: "hallarc",
-  storageBucket: "hallarc.appspot.com",
-  messagingSenderId: "000000000000",
-  appId: "1:000000000000:web:000000000000000000000000"
+  storageBucket: "hallarc.firebasestorage.app",
+  messagingSenderId: "1057782930491",
+  appId: "1:1057782930491:web:b54109ac07001be634501e",
+  measurementId: "G-RDCJCLSQ5X"
 };
 // NOTE FOR GARY: Replace the firebaseConfig above with your actual hallarc Firebase config.
 // Go to Firebase Console → hallarc project → Project Settings → Your apps → Config snippet.
