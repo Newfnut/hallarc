@@ -1,8 +1,8 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 const B = '#007AFF';
-const HOLD_MS = 400;
+const HOLD_MS = 380;
 
 // ─── Default Data ─────────────────────────────────────────────────────────────
 const DEFAULT_SECTIONS = [
@@ -10,7 +10,6 @@ const DEFAULT_SECTIONS = [
   'Grains, Pasta & Sides','Pantry','Beverages','Health & Beauty','Not Urgent'
 ];
 
-// A flat list of common grocery item names for search suggestions
 const COMMON_ITEMS = [
   'Milk','Whole Milk','2% Milk','Skim Milk','Chocolate Milk','Soy Milk','Almond Milk','Oat Milk',
   'Eggs','Eggs Extra Large','Eggs Large','Butter','Cream Cheese','Sour Cream','Heavy Cream',
@@ -104,8 +103,9 @@ function uid() { return Math.random().toString(36).slice(2); }
 // ─── Global Styles ────────────────────────────────────────────────────────────
 const GLOBAL_CSS = `
   * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
-  body { margin: 0; background: #f2f2f7; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif; }
-  input, select, button { font-family: inherit; }
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #f2f2f7; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif; }
+  #root { height: 100%; }
+  input, select, button, textarea { font-family: inherit; }
   ::-webkit-scrollbar { display: none; }
   .ios-scroll {
     -webkit-overflow-scrolling: touch;
@@ -120,8 +120,44 @@ const GLOBAL_CSS = `
     from { opacity: 0; }
     to   { opacity: 1; }
   }
+  @keyframes slideInRight {
+    from { transform: translateX(100%); opacity: 0; }
+    to   { transform: translateX(0);    opacity: 1; }
+  }
   .sheet { animation: slideUp 0.32s cubic-bezier(0.32,0.72,0,1); }
   .fade  { animation: fadeIn  0.18s ease; }
+  .swipe-row {
+    position: relative;
+    overflow: hidden;
+  }
+  .swipe-content {
+    will-change: transform;
+    transition: none;
+  }
+  .swipe-content.snapping {
+    transition: transform 0.2s cubic-bezier(0.34,1,0.64,1);
+  }
+  .swipe-action-delete {
+    position: absolute;
+    right: 0; top: 0; bottom: 0;
+    width: 80px;
+    background: #FF3B30;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 13px; font-weight: 600;
+    flex-direction: column; gap: 2px;
+  }
+  .swipe-action-check {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 80px;
+    background: #34C759;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 13px; font-weight: 600;
+    flex-direction: column; gap: 2px;
+  }
+  /* PWA full-screen safe area */
+  .safe-top    { padding-top: env(safe-area-inset-top, 0px); }
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
 `;
 
 // ─── Shared Components ────────────────────────────────────────────────────────
@@ -184,6 +220,78 @@ function SaleTag({ item }) {
   const expiring = end && ((end - today) / 864e5 < 7);
   const endStr = item.saleEnd ? ' ' + item.saleEnd.slice(5).replace('-','/') : '';
   return <Tag bg={expiring?'#fff3e0':'#e8f5e9'} color={expiring?'#C1440E':'#1a7a3a'}>-${item.discount.toFixed(2)}{endStr}</Tag>;
+}
+
+// ─── Swipeable Item Row ───────────────────────────────────────────────────────
+function SwipeRow({ children, onDelete, onToggleBought, bought }) {
+  const rowRef = useRef(null);
+  const startX = useRef(null);
+  const currentX = useRef(0);
+  const [revealed, setRevealed] = useState(null); // 'delete' | 'check' | null
+
+  function getContent() { return rowRef.current?.querySelector('.swipe-content'); }
+
+  function onTouchStart(e) {
+    startX.current = e.touches[0].clientX;
+    const c = getContent();
+    if (c) { c.classList.remove('snapping'); }
+  }
+
+  function onTouchMove(e) {
+    if (startX.current === null) return;
+    const dx = e.touches[0].clientX - startX.current;
+    currentX.current = dx;
+    const c = getContent();
+    if (!c) return;
+    // Clamp: left swipe up to -100, right swipe up to +80
+    const clamped = Math.max(-100, Math.min(80, dx));
+    c.style.transform = `translateX(${clamped}px)`;
+    if (dx < -10) setRevealed('delete');
+    else if (dx > 10) setRevealed('check');
+    else setRevealed(null);
+  }
+
+  function onTouchEnd() {
+    const c = getContent();
+    if (!c) return;
+    c.classList.add('snapping');
+    const dx = currentX.current;
+    if (dx < -72) {
+      // Confirm delete
+      c.style.transform = 'translateX(-100%)';
+      setTimeout(() => onDelete(), 200);
+    } else if (dx > 60) {
+      // Confirm toggle
+      c.style.transform = 'translateX(0)';
+      onToggleBought();
+    } else {
+      c.style.transform = 'translateX(0)';
+    }
+    setRevealed(null);
+    startX.current = null;
+    currentX.current = 0;
+  }
+
+  return (
+    <div ref={rowRef} className="swipe-row"
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+      onTouchCancel={onTouchEnd}
+    >
+      <div className="swipe-action-check" style={{opacity: revealed==='check'?1:0, transition:'opacity 0.1s'}}>
+        <span style={{fontSize:20}}>{bought ? '↩' : '✓'}</span>
+        <span>{bought ? 'Undo' : 'Done'}</span>
+      </div>
+      <div className="swipe-action-delete" style={{opacity: revealed==='delete'?1:0, transition:'opacity 0.1s'}}>
+        <span style={{fontSize:20}}>🗑</span>
+        <span>Delete</span>
+      </div>
+      <div className="swipe-content">
+        {children}
+      </div>
+    </div>
+  );
 }
 
 // ─── Barcode Scanner ──────────────────────────────────────────────────────────
@@ -266,13 +374,14 @@ function BarcodeScanner({ onResult, onClose }) {
   );
 }
 
-// ─── Item Form (full edit) ────────────────────────────────────────────────────
+// ─── Item Form (AnyList-style polished) ───────────────────────────────────────
 function ItemForm({ item, sections, memory, onSave, onDelete }) {
   const blank = {name:'',qty:1,size:'',section:sections[0]||'',price:'',discount:'',saleEnd:'',weekly:false,watch:false,barcode:''};
   const init = item ? {...item,price:item.price??'',discount:item.discount||'',saleEnd:item.saleEnd||''} : blank;
   const [f, setF] = useState(init);
   const [saleOn, setSaleOn] = useState(item ? item.discount > 0 : false);
   const [showScanner, setShowScanner] = useState(false);
+  const [expandedField, setExpandedField] = useState(null);
 
   const set = (k,v) => setF(p=>({...p,[k]:v}));
 
@@ -286,81 +395,205 @@ function ItemForm({ item, sections, memory, onSave, onDelete }) {
     onSave({...f,qty:parseInt(f.qty)||1,price:parseFloat(f.price)||null,discount:saleOn?(parseFloat(f.discount)||0):0,saleEnd:saleOn?f.saleEnd:''});
   }
 
-  const inp = {
-    width:'100%',border:'1px solid #e5e5ea',borderRadius:10,padding:'9px 12px',
-    fontSize:15,marginBottom:8,boxSizing:'border-box',color:'#000',background:'#f2f2f7',outline:'none'
+  const rowStyle = {
+    display:'flex',alignItems:'center',justifyContent:'space-between',
+    padding:'13px 16px',borderBottom:'0.5px solid #e5e5ea',background:'#fff',
+    minHeight:50
   };
+  const labelStyle = {fontSize:15,color:'#000',display:'flex',alignItems:'center',gap:10};
+  const valueStyle = {fontSize:15,color:'#8e8e93',display:'flex',alignItems:'center',gap:6};
 
   if (showScanner) return <BarcodeScanner onResult={handleBarcodeResult} onClose={()=>setShowScanner(false)} />;
 
   return (
-    <div style={{padding:'8px 16px 24px'}}>
-      <div style={{fontSize:12,color:'#8e8e93',marginBottom:4,fontWeight:500,textTransform:'uppercase',letterSpacing:0.4}}>Item Name</div>
-      <input style={inp} value={f.name} onChange={e=>set('name',e.target.value)} placeholder="e.g. Greek Yogurt" autoFocus />
+    <div style={{paddingBottom:24}}>
 
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:4}}>
-        <div>
-          <div style={{fontSize:12,color:'#8e8e93',marginBottom:4,fontWeight:500,textTransform:'uppercase',letterSpacing:0.4}}>Qty</div>
-          <input style={inp} type="number" min="1" value={f.qty} onChange={e=>set('qty',e.target.value)} />
+      {/* Name + note hero card */}
+      <div style={{background:'#fff',borderRadius:12,margin:'12px 16px',padding:'14px 14px',display:'flex',alignItems:'flex-start',gap:12,boxShadow:'0 1px 3px rgba(0,0,0,0.06)'}}>
+        <button onClick={()=>setShowScanner(true)} style={{
+          width:56,height:56,borderRadius:10,background:'#f2f2f7',border:'none',cursor:'pointer',
+          display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:2,
+          flexShrink:0,color:'#007AFF',fontSize:10,fontWeight:600
+        }}>
+          <span style={{fontSize:22}}>📷</span>
+          <span>Scan</span>
+        </button>
+        <div style={{flex:1}}>
+          <input
+            value={f.name}
+            onChange={e=>set('name',e.target.value)}
+            placeholder="Item name"
+            autoFocus={!item}
+            style={{
+              width:'100%',border:'none',outline:'none',fontSize:19,fontWeight:600,
+              color:'#000',background:'transparent',padding:0,marginBottom:4
+            }}
+          />
+          <input
+            value={f.size}
+            onChange={e=>set('size',e.target.value)}
+            placeholder="Add note or size (e.g. 1.36kg)"
+            style={{
+              width:'100%',border:'none',outline:'none',fontSize:13,
+              color:'#007AFF',background:'transparent',padding:0
+            }}
+          />
         </div>
-        <div>
-          <div style={{fontSize:12,color:'#8e8e93',marginBottom:4,fontWeight:500,textTransform:'uppercase',letterSpacing:0.4}}>Package Size</div>
-          <input style={inp} value={f.size} onChange={e=>set('size',e.target.value)} placeholder="1.36kg" />
-        </div>
+        {/* Star/watch */}
+        <button onClick={()=>set('watch',!f.watch)} style={{background:'none',border:'none',cursor:'pointer',padding:4,fontSize:22,opacity:f.watch?1:0.3,flexShrink:0}}>
+          ★
+        </button>
       </div>
 
-      <div style={{fontSize:12,color:'#8e8e93',marginBottom:4,fontWeight:500,textTransform:'uppercase',letterSpacing:0.4}}>Section</div>
-      <select style={{...inp,appearance:'none',WebkitAppearance:'none'}} value={f.section} onChange={e=>set('section',e.target.value)}>
-        {sections.map(s=><option key={s} value={s}>{s}</option>)}
-      </select>
+      {/* INFO section */}
+      <div style={{margin:'0 16px 8px',fontSize:12,color:'#8e8e93',fontWeight:600,textTransform:'uppercase',letterSpacing:0.5}}>Info</div>
+      <div style={{background:'#fff',borderRadius:12,margin:'0 16px',overflow:'hidden',boxShadow:'0 1px 3px rgba(0,0,0,0.06)'}}>
 
-      <div style={{fontSize:12,color:'#8e8e93',marginBottom:4,fontWeight:500,textTransform:'uppercase',letterSpacing:0.4}}>Price ($)</div>
-      <input style={inp} type="number" step="0.01" value={f.price} onChange={e=>set('price',e.target.value)} placeholder="0.00" />
+        {/* Category/Section */}
+        <div style={rowStyle} onClick={()=>setExpandedField(expandedField==='section'?null:'section')}>
+          <div style={labelStyle}>
+            <span style={{fontSize:20}}>🗂</span>
+            <span>Category</span>
+          </div>
+          <div style={valueStyle}>
+            <span>{f.section}</span>
+            <span style={{color:'#c7c7cc',fontSize:13}}>{expandedField==='section'?'▲':'▶'}</span>
+          </div>
+        </div>
+        {expandedField==='section' && (
+          <div style={{background:'#f9f9f9',borderBottom:'0.5px solid #e5e5ea',maxHeight:200,overflowY:'auto'}}>
+            {sections.map(s=>(
+              <div key={s} onClick={()=>{set('section',s);setExpandedField(null);}}
+                style={{padding:'10px 16px 10px 52px',fontSize:15,color:f.section===s?B:'#000',borderBottom:'0.5px solid #f2f2f7',
+                  fontWeight:f.section===s?600:400,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                {s}
+                {f.section===s && <span style={{color:B}}>✓</span>}
+              </div>
+            ))}
+          </div>
+        )}
 
-      <div style={{background:'#f2f2f7',borderRadius:12,overflow:'hidden',marginBottom:10}}>
+        {/* Quantity */}
+        <div style={rowStyle}>
+          <div style={labelStyle}>
+            <span style={{fontSize:20}}>🔢</span>
+            <span>Quantity</span>
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:0}}>
+            <button onClick={()=>set('qty',Math.max(1,(parseInt(f.qty)||1)-1))}
+              style={{width:32,height:32,borderRadius:'50%',background:'#e5e5ea',border:'none',cursor:'pointer',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center',color:'#3c3c43'}}>
+              −
+            </button>
+            <span style={{fontSize:17,fontWeight:600,color:'#000',minWidth:28,textAlign:'center'}}>{f.qty}</span>
+            <button onClick={()=>set('qty',(parseInt(f.qty)||1)+1)}
+              style={{width:32,height:32,borderRadius:'50%',background:'#007AFF',border:'none',cursor:'pointer',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff'}}>
+              +
+            </button>
+          </div>
+        </div>
+
+        {/* Price */}
+        <div style={{...rowStyle, cursor:'default'}} onClick={()=>setExpandedField(expandedField==='price'?null:'price')}>
+          <div style={labelStyle}>
+            <span style={{fontSize:20}}>💰</span>
+            <span>Price</span>
+          </div>
+          <div style={valueStyle}>
+            <span>{f.price ? `$${parseFloat(f.price).toFixed(2)}` : 'Not set'}</span>
+            <span style={{color:'#c7c7cc',fontSize:13}}>{expandedField==='price'?'▲':'▶'}</span>
+          </div>
+        </div>
+        {expandedField==='price' && (
+          <div style={{background:'#f9f9f9',padding:'10px 16px',borderBottom:'0.5px solid #e5e5ea',display:'flex',alignItems:'center',gap:10}}>
+            <span style={{fontSize:15,color:'#8e8e93',flexShrink:0}}>$</span>
+            <input type="number" step="0.01" value={f.price} onChange={e=>set('price',e.target.value)}
+              placeholder="0.00" autoFocus
+              style={{flex:1,border:'1px solid #e5e5ea',borderRadius:8,padding:'8px 10px',fontSize:15,background:'#fff',outline:'none'}} />
+          </div>
+        )}
+
+        {/* Barcode */}
+        <div style={{...rowStyle,borderBottom:'none'}} onClick={()=>setExpandedField(expandedField==='barcode'?null:'barcode')}>
+          <div style={labelStyle}>
+            <span style={{fontSize:20}}>▋▋</span>
+            <span>Barcode</span>
+          </div>
+          <div style={valueStyle}>
+            <span>{f.barcode || 'Not set'}</span>
+            <span style={{color:'#c7c7cc',fontSize:13}}>{expandedField==='barcode'?'▲':'▶'}</span>
+          </div>
+        </div>
+        {expandedField==='barcode' && (
+          <div style={{background:'#f9f9f9',padding:'10px 16px',display:'flex',gap:8}}>
+            <input value={f.barcode} onChange={e=>set('barcode',e.target.value)} placeholder="Scan or type"
+              style={{flex:1,border:'1px solid #e5e5ea',borderRadius:8,padding:'8px 10px',fontSize:15,background:'#fff',outline:'none'}} />
+            <button onClick={()=>setShowScanner(true)}
+              style={{background:B,color:'#fff',border:'none',borderRadius:8,padding:'0 12px',cursor:'pointer',fontSize:18}}>📷</button>
+          </div>
+        )}
+      </div>
+
+      {/* OPTIONS section */}
+      <div style={{margin:'16px 16px 8px',fontSize:12,color:'#8e8e93',fontWeight:600,textTransform:'uppercase',letterSpacing:0.5}}>Options</div>
+      <div style={{background:'#fff',borderRadius:12,margin:'0 16px',overflow:'hidden',boxShadow:'0 1px 3px rgba(0,0,0,0.06)'}}>
         {[
-          ['On Sale', saleOn, ()=>setSaleOn(v=>!v)],
-          ['Weekly / Regular Buy', f.weekly, ()=>set('weekly',!f.weekly)],
-          ['Watch List', f.watch, ()=>set('watch',!f.watch)],
-        ].map(([label,val,toggle],i,arr)=>(
-          <div key={label} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'11px 14px',borderBottom:i<arr.length-1?'0.5px solid #e5e5ea':'none',background:'#fff'}}>
-            <span style={{fontSize:15,color:'#000'}}>{label}</span>
+          ['🏷', 'On Sale', saleOn, ()=>setSaleOn(v=>!v)],
+          ['🔁', 'Weekly / Regular Buy', f.weekly, ()=>set('weekly',!f.weekly)],
+        ].map(([icon,label,val,toggle],i,arr)=>(
+          <div key={label} style={{...rowStyle,borderBottom:i<arr.length-1?'0.5px solid #e5e5ea':'none'}}>
+            <div style={labelStyle}>
+              <span style={{fontSize:20}}>{icon}</span>
+              <span>{label}</span>
+            </div>
             <Toggle on={val} onToggle={toggle} />
           </div>
         ))}
+
+        {saleOn && (
+          <div style={{background:'#f9f9f9',padding:'10px 16px 12px',borderTop:'0.5px solid #e5e5ea'}}>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              <div>
+                <div style={{fontSize:11,color:'#8e8e93',fontWeight:600,textTransform:'uppercase',letterSpacing:0.4,marginBottom:4}}>Discount</div>
+                <div style={{display:'flex',alignItems:'center',gap:4}}>
+                  <span style={{color:'#8e8e93',fontSize:14}}>-$</span>
+                  <input type="number" step="0.01" value={f.discount} onChange={e=>set('discount',e.target.value)} placeholder="0.00"
+                    style={{flex:1,border:'1px solid #e5e5ea',borderRadius:8,padding:'7px 8px',fontSize:14,background:'#fff',outline:'none'}} />
+                </div>
+              </div>
+              <div>
+                <div style={{fontSize:11,color:'#8e8e93',fontWeight:600,textTransform:'uppercase',letterSpacing:0.4,marginBottom:4}}>Sale Ends</div>
+                <input type="date" value={f.saleEnd} onChange={e=>set('saleEnd',e.target.value)}
+                  style={{width:'100%',border:'1px solid #e5e5ea',borderRadius:8,padding:'7px 8px',fontSize:14,background:'#fff',outline:'none',boxSizing:'border-box'}} />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {saleOn && (
-        <div style={{background:'#f2f2f7',borderRadius:12,padding:'12px 14px',marginBottom:10}}>
-          <div style={{fontSize:12,color:'#8e8e93',marginBottom:4,fontWeight:500,textTransform:'uppercase',letterSpacing:0.4}}>Discount ($)</div>
-          <input style={inp} type="number" step="0.01" value={f.discount} onChange={e=>set('discount',e.target.value)} placeholder="2.00" />
-          <div style={{fontSize:12,color:'#8e8e93',marginBottom:4,fontWeight:500,textTransform:'uppercase',letterSpacing:0.4}}>Sale Ends</div>
-          <input style={{...inp,marginBottom:0}} type="date" value={f.saleEnd} onChange={e=>set('saleEnd',e.target.value)} />
-        </div>
-      )}
-
-      <div style={{fontSize:12,color:'#8e8e93',marginBottom:4,fontWeight:500,textTransform:'uppercase',letterSpacing:0.4}}>Barcode</div>
-      <div style={{display:'flex',gap:8,marginBottom:16}}>
-        <input style={{...inp,marginBottom:0,flex:1}} value={f.barcode} onChange={e=>set('barcode',e.target.value)} placeholder="Scan or type" />
-        <button onClick={()=>setShowScanner(true)} style={{background:B,color:'#fff',border:'none',borderRadius:10,padding:'0 14px',cursor:'pointer',fontSize:18,flexShrink:0}}>📷</button>
-      </div>
-
-      <button onClick={handleSave} style={{width:'100%',background:B,color:'#fff',border:'none',borderRadius:12,padding:14,fontSize:17,fontWeight:600,cursor:'pointer',marginBottom:10}}>
-        {item ? 'Save Changes' : 'Add Item'}
-      </button>
-      {item && (
-        <button onClick={()=>onDelete(item.id)} style={{width:'100%',background:'none',color:'#FF3B30',border:'1px solid #FF3B30',borderRadius:12,padding:12,fontSize:15,cursor:'pointer'}}>
-          Remove Item
+      {/* Save / Delete */}
+      <div style={{padding:'20px 16px 0'}}>
+        <button onClick={handleSave} style={{
+          width:'100%',background:B,color:'#fff',border:'none',borderRadius:12,
+          padding:14,fontSize:17,fontWeight:600,cursor:'pointer',marginBottom:10,
+          boxShadow:'0 2px 8px rgba(0,122,255,0.3)'
+        }}>
+          {item ? 'Save Changes' : 'Add Item'}
         </button>
-      )}
+        {item && (
+          <button onClick={()=>onDelete(item.id)} style={{
+            width:'100%',background:'none',color:'#FF3B30',border:'1px solid #FF3B30',
+            borderRadius:12,padding:12,fontSize:15,cursor:'pointer'
+          }}>
+            Remove Item
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
 // ─── Quick Add Bar ────────────────────────────────────────────────────────────
-// Shows inline search results from memory + common items + "Add X" option.
-// Tapping a result adds it immediately; pencil icon opens full ItemForm.
-function QuickAdd({ sections, memory, onQuickAdd, onOpenEdit }) {
+function QuickAdd({ sections, memory, onQuickAdd, onOpenEdit, onScanBarcode }) {
   const [query, setQuery] = useState('');
   const [focused, setFocused] = useState(false);
   const inputRef = useRef(null);
@@ -370,45 +603,36 @@ function QuickAdd({ sections, memory, onQuickAdd, onOpenEdit }) {
     const q = query.toLowerCase();
     const memKeys = Object.keys(memory || {});
     const combined = [...new Set([...memKeys, ...COMMON_ITEMS])];
-    const matches = combined.filter(n => n.toLowerCase().includes(q) && n.toLowerCase() !== q);
-    return matches.slice(0, 8);
+    return combined.filter(n => n.toLowerCase().includes(q) && n.toLowerCase() !== q).slice(0, 8);
   })();
 
   const showDropdown = focused && (query.trim().length > 0);
 
-  function quickAdd(name, fromMemory) {
+  function quickAdd(name) {
     const mem = (memory || {})[name];
-    const newItem = {
-      id: Date.now(),
-      name,
-      qty: 1,
-      size: mem?.size || '',
-      section: mem?.section || sections[0] || '',
-      price: mem?.price || null,
-      discount: 0,
-      saleEnd: '',
-      weekly: false,
-      watch: false,
-      barcode: mem?.barcode || '',
-      bought: false,
-    };
-    onQuickAdd(newItem);
-    setQuery('');
-    setFocused(false);
-    inputRef.current?.blur();
+    onQuickAdd({
+      id: Date.now(), name, qty:1,
+      size: mem?.size||'', section: mem?.section||sections[0]||'',
+      price: mem?.price||null, discount:0, saleEnd:'', weekly:false, watch:false,
+      barcode: mem?.barcode||'', bought:false,
+    });
+    setQuery(''); setFocused(false); inputRef.current?.blur();
   }
 
   function handleAddCustom() {
     if (!query.trim()) return;
-    const name = query.trim();
-    quickAdd(name, false);
+    quickAdd(query.trim());
   }
 
   return (
     <div style={{position:'relative',zIndex:50}}>
-      {/* Input row */}
-      <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:'#fff',borderBottom:'0.5px solid #e5e5ea'}}>
-        <span style={{color:'#8e8e93',fontSize:20,lineHeight:1,fontWeight:300}}>+</span>
+      <div style={{display:'flex',alignItems:'center',gap:6,padding:'6px 10px',background:'#fff',borderBottom:'0.5px solid #e5e5ea'}}>
+        {/* Camera scan button */}
+        <button onClick={onScanBarcode} style={{
+          background:B,color:'#fff',border:'none',borderRadius:8,
+          width:32,height:32,cursor:'pointer',fontSize:15,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0
+        }}>📷</button>
+        <span style={{color:'#c7c7cc',fontSize:18,lineHeight:1,fontWeight:300,flexShrink:0}}>|</span>
         <input
           ref={inputRef}
           value={query}
@@ -419,22 +643,25 @@ function QuickAdd({ sections, memory, onQuickAdd, onOpenEdit }) {
           placeholder="Add item…"
           style={{flex:1,border:'none',outline:'none',fontSize:15,color:'#000',background:'transparent',padding:'4px 0'}}
         />
-        {query.trim() && (
+        {query.trim() ? (
           <button onClick={()=>{setQuery('');inputRef.current?.focus();}}
-            style={{background:'none',border:'none',color:'#8e8e93',fontSize:18,cursor:'pointer',padding:'0 2px',lineHeight:1}}>✕</button>
+            style={{background:'none',border:'none',color:'#8e8e93',fontSize:18,cursor:'pointer',padding:'0 2px',lineHeight:1,flexShrink:0}}>✕</button>
+        ) : (
+          <button onClick={()=>onOpenEdit({id:null,name:'',qty:1,size:'',section:sections[0]||'',price:'',discount:'',saleEnd:'',weekly:false,watch:false,barcode:''})}
+            style={{background:B,color:'#fff',border:'none',borderRadius:8,width:32,height:32,cursor:'pointer',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontWeight:300}}>
+            +
+          </button>
         )}
       </div>
 
-      {/* Dropdown */}
       {showDropdown && (
         <div style={{
           position:'absolute',top:'100%',left:0,right:0,
           background:'#fff',borderBottom:'0.5px solid #e5e5ea',
-          boxShadow:'0 4px 16px rgba(0,0,0,0.10)',zIndex:60,maxHeight:320,overflowY:'auto'
+          boxShadow:'0 4px 16px rgba(0,0,0,0.10)',zIndex:60,maxHeight:300,overflowY:'auto'
         }}>
-          {/* Add custom at top */}
           <div
-            style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'11px 14px',borderBottom:'0.5px solid #f2f2f7',cursor:'pointer',background:'#fff'}}
+            style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'11px 14px',borderBottom:'0.5px solid #f2f2f7',cursor:'pointer'}}
             onPointerDown={e=>{e.preventDefault();handleAddCustom();}}>
             <span style={{fontSize:15,color:B,fontWeight:500}}>Add "{query.trim()}"</span>
             <button
@@ -444,26 +671,24 @@ function QuickAdd({ sections, memory, onQuickAdd, onOpenEdit }) {
               }}
               style={{background:'none',border:'none',cursor:'pointer',padding:'4px 6px',fontSize:16,color:'#c7c7cc'}}>✏️</button>
           </div>
-
-          {/* Matching items */}
           {suggestions.map(name => {
             const mem = (memory||{})[name];
             const inMemory = !!(memory||{})[name];
             return (
               <div key={name}
-                style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',borderBottom:'0.5px solid #f2f2f7',cursor:'pointer',background:'#fff'}}
-                onPointerDown={e=>{e.preventDefault();quickAdd(name,inMemory);}}>
+                style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',borderBottom:'0.5px solid #f2f2f7',cursor:'pointer'}}
+                onPointerDown={e=>{e.preventDefault();quickAdd(name);}}>
                 <div style={{display:'flex',alignItems:'center',gap:8,flex:1,minWidth:0}}>
-                  {inMemory
-                    ? <span style={{fontSize:14,color:'#8e8e93'}}>🗂</span>
-                    : <span style={{fontSize:14,color:'#c7c7cc'}}>📋</span>}
+                  <span style={{fontSize:14,color: inMemory?'#8e8e93':'#c7c7cc'}}>{inMemory?'🗂':'📋'}</span>
                   <span style={{fontSize:15,color:'#000'}}>{name}</span>
-                  {mem?.price && <span style={{fontSize:13,color:'#8e8e93',marginLeft:4}}>${mem.price.toFixed(2)}</span>}
+                  {mem?.price && <span style={{fontSize:13,color:'#8e8e93'}}>${mem.price.toFixed(2)}</span>}
                   {mem?.size  && <span style={{fontSize:12,color:'#c7c7cc'}}>{mem.size}</span>}
                 </div>
                 <button
                   onPointerDown={e=>{e.stopPropagation();e.preventDefault();
-                    const existing = mem ? {id:null,name,qty:1,size:mem.size||'',section:mem.section||sections[0]||'',price:mem.price||'',discount:'',saleEnd:'',weekly:false,watch:false,barcode:mem.barcode||''} : {id:null,name,qty:1,size:'',section:sections[0]||'',price:'',discount:'',saleEnd:'',weekly:false,watch:false,barcode:''};
+                    const existing = mem
+                      ? {id:null,name,qty:1,size:mem.size||'',section:mem.section||sections[0]||'',price:mem.price||'',discount:'',saleEnd:'',weekly:false,watch:false,barcode:mem.barcode||''}
+                      : {id:null,name,qty:1,size:'',section:sections[0]||'',price:'',discount:'',saleEnd:'',weekly:false,watch:false,barcode:''};
                     onOpenEdit(existing);
                     setQuery(''); setFocused(false);
                   }}
@@ -491,13 +716,12 @@ function SectionsManager({ sections, onUpdate, onRemove, onAdd }) {
     const [moved] = arr.splice(dragIdx.current, 1);
     arr.splice(i, 0, moved);
     onUpdate(arr);
-    dragIdx.current = null;
-    setOverIdx(null);
+    dragIdx.current = null; setOverIdx(null);
   }
 
   return (
     <div style={{padding:'0 16px 16px'}}>
-      <p style={{fontSize:13,color:'#8e8e93',margin:'8px 0 12px'}}>Drag to reorder sections. Order matches your store layout.</p>
+      <p style={{fontSize:13,color:'#8e8e93',margin:'8px 0 12px'}}>Drag to reorder. Order matches your store layout.</p>
       <div style={{background:'#fff',borderRadius:12,overflow:'hidden',marginBottom:12}}>
         {sections.map((sec,i)=>(
           <div key={sec} draggable
@@ -576,9 +800,9 @@ function ExportView({ items, sections }) {
   );
 }
 
-// ─── Store Picker (for trip creation from Lists tab) ──────────────────────────
+// ─── Store Picker ─────────────────────────────────────────────────────────────
 function StorePicker({ stores, onClose, onCreateTrip }) {
-  const [step, setStep] = useState('pick'); // 'pick' | 'date'
+  const [step, setStep] = useState('pick');
   const [chosenStore, setChosenStore] = useState(null);
   const [tripDate, setTripDate] = useState(new Date().toISOString().slice(0,10));
 
@@ -606,14 +830,13 @@ function StorePicker({ stores, onClose, onCreateTrip }) {
 
   return (
     <div style={{padding:'8px 0 16px'}}>
-      <p style={{fontSize:13,color:'#8e8e93',margin:'0 16px 12px'}}>Choose a store to create a dated shopping trip.</p>
-      <div style={{background:'#fff',borderRadius:0,overflow:'hidden'}}>
+      <div style={{background:'#fff',overflow:'hidden'}}>
         {stores.map((store,i)=>(
           <div key={store.id}
-            style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',borderBottom:i<stores.length-1?'0.5px solid #e5e5ea':'none',cursor:'pointer',background:'#fff'}}
-            onPointerDown={e=>e.currentTarget.style.background='#f2f2f7'}
+            style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',borderBottom:i<stores.length-1?'0.5px solid #e5e5ea':'none',cursor:'pointer'}}
+            onPointerDown={e=>{e.currentTarget.style.background='#f2f2f7';}}
             onPointerUp={e=>{e.currentTarget.style.background='#fff'; setChosenStore(store.id); setStep('date');}}
-            onPointerLeave={e=>e.currentTarget.style.background='#fff'}>
+            onPointerLeave={e=>{e.currentTarget.style.background='#fff';}}>
             <div style={{width:40,height:40,borderRadius:10,background:store.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,flexShrink:0}}>{store.icon}</div>
             <div style={{flex:1}}>
               <div style={{fontSize:16,fontWeight:500,color:'#000'}}>{store.name}</div>
@@ -676,16 +899,17 @@ function StoreListScreen({ stores, onSelectStore, onAddStore, onEditStore, onCre
   if (editingStore !== null) {
     const existing = editingStore === 'new' ? null : stores.find(s=>s.id===editingStore);
     return (
-      <div style={{background:'#f2f2f7',minHeight:'100vh'}}>
+      <div style={{background:'#f2f2f7',height:'100%',display:'flex',flexDirection:'column',overflow:'hidden'}}>
         <style>{GLOBAL_CSS}</style>
-        <div style={{background:'#fff',padding:'56px 16px 12px',borderBottom:'0.5px solid #e5e5ea',position:'sticky',top:0,zIndex:10}}>
-          <div style={{display:'flex',alignItems:'center',gap:8}}>
+        <div style={{background:'#fff',padding:'0 16px 12px',borderBottom:'0.5px solid #e5e5ea',flexShrink:0,
+          paddingTop:'calc(env(safe-area-inset-top, 0px) + 12px)'}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,paddingTop:8}}>
             <button onClick={()=>setEditingStore(null)} style={{background:'none',border:'none',color:B,fontSize:17,cursor:'pointer',padding:'4px 0'}}>‹ Back</button>
             <span style={{fontSize:17,fontWeight:600,flex:1,textAlign:'center'}}>{existing?'Edit Store':'New Store'}</span>
             <div style={{width:60}}/>
           </div>
         </div>
-        <div style={{padding:'0 0 80px'}}>
+        <div className="ios-scroll" style={{flex:1,overflowY:'auto',paddingBottom:80}}>
           <StoreForm
             store={existing}
             onSave={s=>{ if(existing) onEditStore(s); else onAddStore(s); setEditingStore(null); }}
@@ -697,26 +921,23 @@ function StoreListScreen({ stores, onSelectStore, onAddStore, onEditStore, onCre
   }
 
   return (
-    <div style={{background:'#f2f2f7',minHeight:'100vh',display:'flex',flexDirection:'column'}}>
+    <div style={{background:'#f2f2f7',height:'100%',display:'flex',flexDirection:'column',overflow:'hidden'}}>
       <style>{GLOBAL_CSS}</style>
       {/* Header */}
-      <div style={{background:'rgba(255,255,255,0.92)',backdropFilter:'blur(20px)',WebkitBackdropFilter:'blur(20px)',padding:'56px 16px 12px',borderBottom:'0.5px solid rgba(60,60,67,0.18)',position:'sticky',top:0,zIndex:10}}>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+      <div style={{
+        background:'rgba(255,255,255,0.92)',backdropFilter:'blur(20px)',WebkitBackdropFilter:'blur(20px)',
+        borderBottom:'0.5px solid rgba(60,60,67,0.18)',flexShrink:0,
+        paddingTop:'calc(env(safe-area-inset-top, 0px) + 8px)',
+        paddingBottom:10, paddingLeft:16, paddingRight:16
+      }}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',paddingTop:6}}>
           <span style={{fontSize:28,fontWeight:700,color:'#000',letterSpacing:-0.5}}>Lists</span>
           <button onClick={()=>setEditingStore('new')} style={{background:'none',border:'none',color:B,fontSize:28,cursor:'pointer',lineHeight:1,padding:'0 4px'}}>+</button>
         </div>
       </div>
 
-      {/* Search bar */}
-      <div style={{padding:'10px 16px 6px',background:'rgba(255,255,255,0.92)',borderBottom:'0.5px solid rgba(60,60,67,0.1)'}}>
-        <div style={{background:'rgba(118,118,128,0.12)',borderRadius:10,display:'flex',alignItems:'center',padding:'7px 12px',gap:6}}>
-          <span style={{color:'#8e8e93',fontSize:15}}>🔍</span>
-          <span style={{color:'#8e8e93',fontSize:15}}>Search Lists</span>
-        </div>
-      </div>
-
       {/* Store list */}
-      <div className="ios-scroll" style={{flex:1,overflowY:'auto',padding:'12px 16px',paddingBottom:90}}>
+      <div className="ios-scroll" style={{flex:1,overflowY:'auto',padding:'12px 16px',paddingBottom:'calc(env(safe-area-inset-bottom,0px) + 80px)'}}>
         <div style={{background:'#fff',borderRadius:12,overflow:'hidden'}}>
           {stores.map((store, i) => {
             const remaining = store.items.filter(it=>!it.bought).length;
@@ -733,7 +954,7 @@ function StoreListScreen({ stores, onSelectStore, onAddStore, onEditStore, onCre
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:16,fontWeight:600,color:'#000'}}>{store.name}</div>
                   <div style={{fontSize:13,color:'#8e8e93'}}>
-                    {remaining > 0 ? `${remaining} item${remaining!==1?'s':''} remaining` : 'No items remaining'}
+                    {remaining > 0 ? `${remaining} item${remaining!==1?'s':''} remaining` : 'All done ✓'}
                   </div>
                 </div>
                 <span style={{color:'#c7c7cc',fontSize:18,fontWeight:300}}>›</span>
@@ -748,14 +969,15 @@ function StoreListScreen({ stores, onSelectStore, onAddStore, onEditStore, onCre
       </div>
 
       {/* Bottom tab bar */}
-      <div style={{position:'fixed',bottom:0,left:0,right:0,
+      <div style={{
         background:'rgba(255,255,255,0.92)',backdropFilter:'blur(20px)',WebkitBackdropFilter:'blur(20px)',
-        borderTop:'0.5px solid rgba(60,60,67,0.2)',padding:'8px 0',paddingBottom:'env(safe-area-inset-bottom,8px)',
-        display:'flex',zIndex:100}}>
+        borderTop:'0.5px solid rgba(60,60,67,0.2)',
+        display:'flex',zIndex:100,flexShrink:0,
+        paddingBottom:'env(safe-area-inset-bottom,8px)',paddingTop:8
+      }}>
         {[
           {icon:'🛒',label:'Lists',action:()=>{}},
           {icon:'📅',label:'New Trip',action:()=>setShowTripPicker(true)},
-          {icon:'🍽',label:'Recipes',action:()=>{}},
           {icon:'⚙️',label:'Settings',action:()=>{}},
         ].map(({icon,label,action},i)=>(
           <div key={label} onClick={action} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:2,opacity:i===0?1:0.5,cursor:'pointer'}}>
@@ -765,7 +987,6 @@ function StoreListScreen({ stores, onSelectStore, onAddStore, onEditStore, onCre
         ))}
       </div>
 
-      {/* Trip Picker Sheet */}
       <Sheet open={showTripPicker} onClose={()=>setShowTripPicker(false)} title="New Shopping Trip">
         <StorePicker stores={stores} onClose={()=>setShowTripPicker(false)} onCreateTrip={onCreateTrip} />
       </Sheet>
@@ -780,15 +1001,11 @@ function TripsScreen({ store, onSave }) {
 
   function saveTrip(t) {
     const updated = trips.find(x=>x.id===t.id) ? trips.map(x=>x.id===t.id?t:x) : [...trips,t];
-    setTrips(updated);
-    onSave(updated);
-    setEditing(null);
+    setTrips(updated); onSave(updated); setEditing(null);
   }
   function deleteTrip(id) {
     const updated = trips.filter(t=>t.id!==id);
-    setTrips(updated);
-    onSave(updated);
-    setEditing(null);
+    setTrips(updated); onSave(updated); setEditing(null);
   }
   function addTrip() {
     setEditing({id:uid(),label:`${store.name} — New Trip`,date:new Date().toISOString().slice(0,10)});
@@ -840,17 +1057,18 @@ function TripsScreen({ store, onSave }) {
 }
 
 // ─── Shopping List Screen ─────────────────────────────────────────────────────
-const CHIP_FILTERS = [{k:'all',l:'All'},{k:'weekly',l:'Weekly'},{k:'sale',l:'On Sale'},{k:'watchlist',l:'Watch List'}];
 const LIST_VIEWS = ['Active','All','Done'];
+const CHIP_FILTERS = [{k:'all',l:'All'},{k:'weekly',l:'Weekly'},{k:'sale',l:'On Sale'},{k:'watchlist',l:'Watch List'}];
 
 function ShoppingListScreen({ store, onBack, onUpdateStore }) {
   const [listView, setListView] = useState('Active');
   const [filter, setFilter] = useState('all');
   const [sheet, setSheet] = useState(null);
   const [editingItem, setEditingItem] = useState(null);
+  const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
   const nextId = useRef(Date.now());
 
-  // Drag
+  // Long-press drag state
   const holdTimer = useRef(null);
   const dragId = useRef(null);
   const isDragging = useRef(false);
@@ -879,6 +1097,8 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
   }
 
   function onPointerDown(e, id) {
+    // Don't start drag if it's a button
+    if (e.target.closest('button')) return;
     holdTimer.current = setTimeout(()=>{
       isDragging.current=true; dragId.current=id; setDraggingId(id);
       if(navigator.vibrate) navigator.vibrate(30);
@@ -901,7 +1121,7 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
     }
   }
   function onPointerMove(e, id) { if(isDragging.current) setDragOverId(id); }
-  function onPointerLeave() { clearTimeout(holdTimer.current); }
+  function onPointerCancel() { clearTimeout(holdTimer.current); isDragging.current=false; dragId.current=null; setDraggingId(null); setDragOverId(null); }
 
   const visibleItems = (() => {
     let base = items;
@@ -921,9 +1141,7 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
     const saved = isNew
       ? {...data, id: nextId.current++, bought: false}
       : {...editingItem, ...data};
-    const newItems = isNew
-      ? [...items, saved]
-      : items.map(i=>i.id===saved.id?saved:i);
+    const newItems = isNew ? [...items, saved] : items.map(i=>i.id===saved.id?saved:i);
     const newMemory = data.name.trim() ? {
       ...store.memory,
       [data.name.trim()]: {size:data.size||'',price:data.price||null,section:data.section,barcode:data.barcode||''}
@@ -937,7 +1155,6 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
     setSheet(null); setEditingItem(null);
   }
 
-  // Quick add from inline bar
   function handleQuickAdd(newItem) {
     const newMemory = newItem.name.trim() ? {
       ...store.memory,
@@ -946,58 +1163,110 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
     updateStore({items:[...items, newItem], memory:newMemory});
   }
 
-  // Open full edit from quick-add pencil
   function handleOpenEditFromQuick(partialItem) {
-    setEditingItem(partialItem.id ? items.find(i=>i.id===partialItem.id) || null : null);
-    // Pre-fill form with partial data
     setEditingItem(partialItem);
     setSheet('edit');
   }
 
+  // Re-add weekly item (adds a fresh copy to active list)
+  function reAddWeekly(item) {
+    const fresh = {...item, id: nextId.current++, bought: false};
+    updateStore({items:[...items, fresh]});
+  }
+
+  function handleBarcodeForQuickAdd(result) {
+    setShowBarcodeScanner(false);
+    if (result.name) {
+      // Try to find in memory
+      const mem = store.memory[result.name];
+      handleQuickAdd({
+        id: Date.now(), name: result.name, qty:1,
+        size: result.size||mem?.size||'',
+        section: mem?.section||sections[0]||'',
+        price: mem?.price||null, discount:0, saleEnd:'', weekly:false, watch:false,
+        barcode: result.barcode||'', bought:false,
+      });
+    } else {
+      // Open edit form with barcode pre-filled
+      setEditingItem({id:null,name:'',qty:1,size:result.size||'',section:sections[0]||'',price:'',discount:'',saleEnd:'',weekly:false,watch:false,barcode:result.barcode});
+      setSheet('edit');
+    }
+  }
+
+  if (showBarcodeScanner) {
+    return (
+      <div style={{background:'#000',height:'100%',display:'flex',flexDirection:'column'}}>
+        <style>{GLOBAL_CSS}</style>
+        <div style={{background:'rgba(0,0,0,0.8)',padding:'calc(env(safe-area-inset-top,0px) + 12px) 16px 12px',display:'flex',alignItems:'center',gap:8}}>
+          <button onClick={()=>setShowBarcodeScanner(false)} style={{background:'none',border:'none',color:'#fff',fontSize:17,cursor:'pointer'}}>✕ Cancel</button>
+        </div>
+        <div style={{flex:1,background:'#fff'}}>
+          <BarcodeScanner onResult={handleBarcodeForQuickAdd} onClose={()=>setShowBarcodeScanner(false)} />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div style={{background:'#f2f2f7',minHeight:'100vh',display:'flex',flexDirection:'column'}}>
+    <div style={{background:'#f2f2f7',height:'100%',display:'flex',flexDirection:'column',overflow:'hidden',width:'100%'}}>
       <style>{GLOBAL_CSS}</style>
 
       {/* ── Sticky header ── */}
-      <div style={{background:'rgba(255,255,255,0.96)',backdropFilter:'blur(20px)',WebkitBackdropFilter:'blur(20px)',
-        borderBottom:'0.5px solid rgba(60,60,67,0.18)',position:'sticky',top:0,zIndex:20}}>
-
-        {/* Nav row */}
-        <div style={{display:'flex',alignItems:'center',padding:'52px 12px 6px'}}>
-          <button onClick={onBack} style={{background:'none',border:'none',color:B,fontSize:17,cursor:'pointer',padding:'4px 8px 4px 0',display:'flex',alignItems:'center',gap:2}}>
-            <span style={{fontSize:20,lineHeight:1}}>‹</span> Lists
+      <div style={{
+        background:'rgba(255,255,255,0.96)',backdropFilter:'blur(20px)',WebkitBackdropFilter:'blur(20px)',
+        borderBottom:'0.5px solid rgba(60,60,67,0.18)',flexShrink:0,width:'100%',
+        paddingTop:'calc(env(safe-area-inset-top, 0px) + 4px)'
+      }}>
+        {/* Nav row — compact */}
+        <div style={{display:'flex',alignItems:'center',padding:'6px 12px 4px'}}>
+          <button onClick={onBack} style={{background:'none',border:'none',color:B,fontSize:15,cursor:'pointer',padding:'4px 8px 4px 0',display:'flex',alignItems:'center',gap:2,flexShrink:0}}>
+            <span style={{fontSize:18,lineHeight:1}}>‹</span> Lists
           </button>
-          <div style={{flex:1,textAlign:'center'}}>
-            <div style={{fontSize:17,fontWeight:600,color:'#000'}}>{store.icon} {store.name}</div>
-            <div style={{fontSize:12,color:'#8e8e93'}}>{remaining} of {items.length} remaining</div>
+          <div style={{flex:1,textAlign:'center',minWidth:0}}>
+            <div style={{fontSize:16,fontWeight:600,color:'#000',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
+              {store.icon} {store.name}
+            </div>
+            <div style={{fontSize:11,color:'#8e8e93'}}>{remaining} of {items.length} remaining</div>
           </div>
-          <button onClick={()=>setSheet('export')} style={{background:'none',border:'none',color:B,fontSize:14,fontWeight:500,cursor:'pointer',padding:'4px 0 4px 8px'}}>Export</button>
+          <button onClick={()=>setSheet('export')} style={{background:'none',border:'none',color:B,fontSize:14,fontWeight:500,cursor:'pointer',padding:'4px 0 4px 8px',flexShrink:0}}>Export</button>
         </div>
 
-        {/* View selector + total — single row */}
-        <div style={{display:'flex',alignItems:'center',padding:'4px 12px 6px',gap:8}}>
-          <select value={listView} onChange={e=>setListView(e.target.value)}
-            style={{border:'none',background:'none',color:B,fontSize:14,fontWeight:600,cursor:'pointer',outline:'none',padding:'2px 0',WebkitAppearance:'none',appearance:'none',
-            backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23007AFF'/%3E%3C/svg%3E")`,
-            backgroundRepeat:'no-repeat',backgroundPosition:'right 4px center',paddingRight:18}}>
-            {LIST_VIEWS.map(v=><option key={v} value={v}>{v}</option>)}
-          </select>
-          <div style={{flex:1}}/>
-          <span style={{fontSize:12,color:'#8e8e93'}}>Est.</span>
-          <span style={{fontSize:15,fontWeight:700,color:store.color}}>${estTotal.toFixed(2)}</span>
-        </div>
+        {/* Single control row: view dropdown | filter chips | est total */}
+        <div style={{display:'flex',alignItems:'center',padding:'2px 10px 6px',gap:6,overflowX:'auto'}}>
+          {/* View dropdown styled like AnyList */}
+          <div style={{display:'flex',alignItems:'center',gap:1,flexShrink:0}}>
+            <select value={listView} onChange={e=>setListView(e.target.value)}
+              style={{
+                border:'none',background:'none',color:B,fontSize:14,fontWeight:700,cursor:'pointer',outline:'none',
+                padding:'2px 18px 2px 0',WebkitAppearance:'none',appearance:'none',
+                backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23007AFF'/%3E%3C/svg%3E")`,
+                backgroundRepeat:'no-repeat',backgroundPosition:'right 2px center',
+              }}>
+              {LIST_VIEWS.map(v=><option key={v} value={v}>{v}</option>)}
+            </select>
+          </div>
 
-        {/* Chip filters */}
-        <div style={{display:'flex',gap:6,padding:'0 12px 8px',overflowX:'auto'}}>
-          {CHIP_FILTERS.map(f=>(
-            <button key={f.k} onClick={()=>setFilter(f.k)} style={{
-              border:filter===f.k?'none':'0.5px solid #c7c7cc',
-              borderRadius:20,padding:'3px 10px',fontSize:12,fontWeight:500,
-              background:filter===f.k?B:'none',
-              color:filter===f.k?'#fff':'#3c3c43',
-              cursor:'pointer',whiteSpace:'nowrap',flexShrink:0
-            }}>{f.l}</button>
-          ))}
+          {/* Divider */}
+          <span style={{color:'#e5e5ea',fontSize:16,flexShrink:0}}>|</span>
+
+          {/* Filter chips - scrollable */}
+          <div style={{display:'flex',gap:5,overflowX:'auto',flex:1}}>
+            {CHIP_FILTERS.map(f=>(
+              <button key={f.k} onClick={()=>setFilter(f.k)} style={{
+                border:filter===f.k?'none':'0.5px solid #c7c7cc',
+                borderRadius:20,padding:'3px 10px',fontSize:12,fontWeight:500,
+                background:filter===f.k?B:'none',
+                color:filter===f.k?'#fff':'#3c3c43',
+                cursor:'pointer',whiteSpace:'nowrap',flexShrink:0
+              }}>{f.l}</button>
+            ))}
+          </div>
+
+          {/* Est total */}
+          <div style={{display:'flex',alignItems:'center',gap:3,flexShrink:0}}>
+            <span style={{fontSize:11,color:'#8e8e93'}}>Est.</span>
+            <span style={{fontSize:14,fontWeight:700,color:store.color}}>${estTotal.toFixed(2)}</span>
+          </div>
         </div>
 
         {/* Quick Add bar */}
@@ -1006,14 +1275,17 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
           memory={store.memory}
           onQuickAdd={handleQuickAdd}
           onOpenEdit={handleOpenEditFromQuick}
+          onScanBarcode={()=>setShowBarcodeScanner(true)}
         />
       </div>
 
-      {/* ── Scrollable list — full width ── */}
-      <div className="ios-scroll" style={{flex:1,overflowY:'auto',paddingBottom:72}}>
+      {/* ── Scrollable list ── */}
+      <div className="ios-scroll" style={{flex:1,overflowY:'auto',paddingBottom:'calc(env(safe-area-inset-bottom,0px) + 60px)',width:'100%'}}>
         {visibleItems.length === 0 && (
           <div style={{textAlign:'center',padding:'40px 24px',color:'#8e8e93',fontSize:15}}>
-            {listView==='Done'?'Nothing checked off yet.\nDouble-tap any item to mark it done.':'No items — type above to add one.'}
+            {listView==='Done'
+              ? 'Nothing checked off yet.\nSwipe right on any item to mark it done.'
+              : 'No items — type above to add one.'}
           </div>
         )}
 
@@ -1022,7 +1294,7 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
           if (!its.length) return null;
           return (
             <div key={sec}>
-              {/* Section header — full width solid tile */}
+              {/* Section header */}
               <div style={{
                 background: store.color,
                 padding:'5px 14px',
@@ -1032,73 +1304,92 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
                 <span style={{fontSize:11,color:'rgba(255,255,255,0.75)',fontWeight:500}}>{its.length}</span>
               </div>
 
-              {/* Item rows */}
+              {/* Item rows with swipe */}
               {its.map((item,idx)=>{
                 const eff = effectivePrice(item);
                 const lineTotal = eff ? eff * item.qty : null;
                 const isDrag = draggingId===item.id;
                 const isOver = dragOverId===item.id && draggingId!==null;
+
                 return (
-                  <div key={item.id}
-                    onPointerDown={e=>onPointerDown(e,item.id)}
-                    onPointerUp={e=>onPointerUp(e,item.id)}
-                    onPointerMove={e=>onPointerMove(e,item.id)}
-                    onPointerLeave={onPointerLeave}
-                    onClick={()=>{ if(!isDragging.current) handleRowTap(item.id); }}
-                    style={{
-                      background: isDrag?'#e5f0ff':isOver?'#f0f8ff':'#fff',
-                      borderBottom: idx<its.length-1 ? '0.5px solid #e5e5ea' : 'none',
-                      borderTop: isOver ? `2px solid ${B}` : '2px solid transparent',
-                      padding:'7px 12px',
-                      display:'flex',alignItems:'center',gap:8,
-                      opacity: isDrag?0.6:1,
-                      transform: isDrag?'scale(1.01)':'scale(1)',
-                      transition:'transform 0.1s, opacity 0.1s',
-                      touchAction:'none',userSelect:'none',cursor:'pointer',
-                    }}>
-
-                    {/* Drag handle */}
-                    <span style={{color:'#d1d1d6',fontSize:14,flexShrink:0,cursor:'grab'}}>≡</span>
-
-                    {/* Info */}
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{
-                        fontSize:15,fontWeight:item.bought?400:500,
-                        display:'flex',alignItems:'center',gap:5,flexWrap:'wrap',
-                        textDecoration:item.bought?'line-through':'none',
-                        color:item.bought?'#aeaeb2':'#000',
+                  <SwipeRow
+                    key={item.id}
+                    bought={item.bought}
+                    onDelete={()=>deleteItem(item.id)}
+                    onToggleBought={()=>updateStore({items: items.map(i=>i.id===item.id?{...i,bought:!i.bought}:i)})}
+                  >
+                    <div
+                      onPointerDown={e=>onPointerDown(e,item.id)}
+                      onPointerUp={e=>onPointerUp(e,item.id)}
+                      onPointerMove={e=>onPointerMove(e,item.id)}
+                      onPointerCancel={onPointerCancel}
+                      onClick={()=>{ if(!isDragging.current) handleRowTap(item.id); }}
+                      style={{
+                        background: isDrag?'#e5f0ff':isOver?'#f0f8ff':'#fff',
+                        borderBottom: idx<its.length-1 ? '0.5px solid #f2f2f7' : 'none',
+                        borderTop: isOver ? `2px solid ${B}` : '2px solid transparent',
+                        padding:'9px 12px 9px 14px',
+                        display:'flex',alignItems:'center',gap:10,
+                        opacity: isDrag?0.6:1,
+                        transform: isDrag?'scale(1.01)':'scale(1)',
+                        transition:'transform 0.1s, opacity 0.1s',
+                        touchAction:'pan-y',userSelect:'none',cursor:'pointer',
+                        minWidth:0,width:'100%',boxSizing:'border-box',
                       }}>
-                        {item.name}
-                        {item.qty>1 && <span style={{fontSize:12,color:'#8e8e93',fontWeight:400}}>×{item.qty}</span>}
+
+                      {/* Info */}
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{
+                          fontSize:15,fontWeight:item.bought?400:500,
+                          display:'flex',alignItems:'center',gap:5,flexWrap:'wrap',
+                          textDecoration:item.bought?'line-through':'none',
+                          color:item.bought?'#aeaeb2':'#000',
+                        }}>
+                          {item.name}
+                          {item.qty>1 && <span style={{fontSize:12,color:'#8e8e93',fontWeight:400}}>×{item.qty}</span>}
+                        </div>
+                        {(item.size || item.discount || item.weekly || item.watch) && (
+                          <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:2,alignItems:'center'}}>
+                            {item.size && <span style={{fontSize:11,color:'#8e8e93'}}>{item.size}</span>}
+                            <SaleTag item={item} />
+                            {item.weekly && <Tag bg="#f3e5f5" color="#7b1fa2">weekly</Tag>}
+                            {item.watch  && <Tag bg="#e3f2fd" color="#1565c0">watch</Tag>}
+                          </div>
+                        )}
                       </div>
-                      {(item.size || item.discount || item.weekly || item.watch) && (
-                        <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:1,alignItems:'center'}}>
-                          {item.size && <span style={{fontSize:11,color:'#8e8e93'}}>{item.size}</span>}
-                          <SaleTag item={item} />
-                          {item.weekly && <Tag bg="#f3e5f5" color="#7b1fa2">weekly</Tag>}
-                          {item.watch  && <Tag bg="#e3f2fd" color="#1565c0">watch</Tag>}
+
+                      {/* Re-add weekly button (shows in Done view) */}
+                      {item.bought && item.weekly && listView==='Done' && (
+                        <button
+                          onClick={e=>{e.stopPropagation();reAddWeekly(item);}}
+                          style={{
+                            background:'#f3e5f5',color:'#7b1fa2',border:'none',
+                            borderRadius:8,padding:'4px 8px',fontSize:11,fontWeight:600,
+                            cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'
+                          }}>
+                          + Re-add
+                        </button>
+                      )}
+
+                      {/* Price */}
+                      {item.price != null && (
+                        <div style={{textAlign:'right',flexShrink:0,fontSize:13,fontWeight:500}}>
+                          {item.discount>0 && (
+                            <div style={{fontSize:10,color:'#aeaeb2',textDecoration:'line-through'}}>${(item.price*item.qty).toFixed(2)}</div>
+                          )}
+                          <span style={{color:item.discount?'#1a7a3a':(item.bought?'#aeaeb2':'#000')}}>
+                            ${lineTotal.toFixed(2)}
+                          </span>
                         </div>
                       )}
+
+                      {/* Edit */}
+                      <button onClick={e=>{e.stopPropagation();setEditingItem(item);setSheet('edit');}}
+                        style={{background:'none',border:'none',color:'#c7c7cc',fontSize:15,cursor:'pointer',flexShrink:0,padding:'4px 2px'}}>
+                        ✏️
+                      </button>
                     </div>
-
-                    {/* Price */}
-                    {item.price && (
-                      <div style={{textAlign:'right',flexShrink:0,fontSize:13,fontWeight:500}}>
-                        {item.discount>0 && (
-                          <div style={{fontSize:10,color:'#aeaeb2',textDecoration:'line-through'}}>${(item.price*item.qty).toFixed(2)}</div>
-                        )}
-                        <span style={{color:item.discount?'#1a7a3a':(item.bought?'#aeaeb2':'#000')}}>
-                          ${lineTotal.toFixed(2)}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Edit */}
-                    <button onClick={e=>{e.stopPropagation();setEditingItem(item);setSheet('edit');}}
-                      style={{background:'none',border:'none',color:'#c7c7cc',fontSize:15,cursor:'pointer',flexShrink:0,padding:'2px 4px'}}>
-                      ✏️
-                    </button>
-                  </div>
+                  </SwipeRow>
                 );
               })}
             </div>
@@ -1107,10 +1398,13 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
       </div>
 
       {/* Bottom tab bar */}
-      <div style={{position:'fixed',bottom:0,left:0,right:0,
+      <div style={{
         background:'rgba(255,255,255,0.92)',backdropFilter:'blur(20px)',WebkitBackdropFilter:'blur(20px)',
         borderTop:'0.5px solid rgba(60,60,67,0.2)',
-        display:'flex',padding:'8px 0',paddingBottom:'env(safe-area-inset-bottom,8px)',zIndex:10}}>
+        display:'flex',flexShrink:0,
+        paddingBottom:'env(safe-area-inset-bottom,8px)',paddingTop:8,
+        zIndex:10
+      }}>
         {[['☰','List',null],['📅','Trips','trips'],['⚙️','Sections','sections']].map(([icon,label,v])=>(
           <button key={label} onClick={()=>setSheet(v)} style={{
             flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:1,
@@ -1166,7 +1460,6 @@ export default function App() {
 
   function addStore(store) { setStores(prev=>[...prev, store]); }
 
-  // Create a trip for a store from the Lists screen
   function createTrip(storeId, date) {
     setStores(prev=>prev.map(s=>{
       if (s.id !== storeId) return s;
