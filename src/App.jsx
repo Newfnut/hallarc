@@ -13,15 +13,11 @@ const firebaseConfig = {
   appId: "1:1057782930491:web:b54109ac07001be634501e",
   measurementId: "G-RDCJCLSQ5X"
 };
-// NOTE FOR GARY: Replace the firebaseConfig above with your actual hallarc Firebase config.
-// Go to Firebase Console → hallarc project → Project Settings → Your apps → Config snippet.
-// The INITIAL_STORES below are only used the very first time the app runs on a fresh Firebase.
-// After that, all data comes from Firestore and nothing resets on deploy.
 
 const fbApp  = initializeApp(firebaseConfig);
 const db     = getFirestore(fbApp);
 const auth   = getAuth(fbApp);
-const HH_DOC = "household/main"; // shared document path
+const HH_DOC = "household/main";
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 const B       = '#007AFF';
@@ -55,6 +51,33 @@ const COMMON_ITEMS = [
   'Raspberry Jam','Cherry Juice','Condensed Milk','Canned Tomatoes','Chicken Broth',
 ];
 
+// ─── Smart category guesser ───────────────────────────────────────────────────
+// Maps keywords → section names (matches DEFAULT_SECTIONS)
+const CATEGORY_KEYWORDS = {
+  'Produce':              ['apple','banana','orange','strawberr','blueberr','grape','lemon','lime','avocado','tomato','spinach','arugula','kale','lettuce','broccoli','cauliflower','carrot','celery','cucumber','pepper','mushroom','onion','garlic','potato','sweet potato','corn','zucchini','asparagus','mango','pineapple','peach','plum','pear','berry','berries','herb','ginger','beet','radish','leek','shallot','fennel','cabbage','brussels','artichoke','eggplant','squash','cantaloupe','watermelon','melon','cilantro','parsley','basil','mint','thyme','rosemary','dill','chive'],
+  'Dairy':                ['milk','cheese','butter','cream','yogurt','egg','sour cream','cheddar','mozzarella','parmesan','brie','feta','gouda','ricotta','cottage','half and half','whipping'],
+  'Meat':                 ['chicken','beef','turkey','pork','steak','bacon','sausage','ham','lamb','veal','bison','venison','ground','roast','rib','loin','filet','pepperoni','salami','prosciutto'],
+  'Deli':                 ['deli','cold cut','hot dog','wiener','bologna','pastrami','corned beef','rotisserie','sliced'],
+  'Bakery':               ['bread','sourdough','bagel','muffin','croissant','bun','roll','loaf','cake','pie','donut','cookie','pastry','pita','tortilla','naan','crumpet','baguette'],
+  'Frozen Foods':         ['frozen','ice cream','popsicle','pizza','edamame'],
+  'Beverages':            ['juice','water','coffee','tea','soda','pop','lemonade','kombucha','sparkling','energy drink','beer','wine','cider','milk alternative','oat milk','almond milk','soy milk'],
+  'Grains, Pasta & Sides':['pasta','rice','quinoa','oatmeal','cereal','granola','bread crumb','noodle','couscous','barley','lentil','oat','flour','cornmeal','grits','polenta','cracker','pretzel','chip'],
+  'Pantry':               ['oil','vinegar','sauce','ketchup','mustard','mayo','salsa','peanut butter','jam','honey','maple','syrup','spice','salt','pepper','sugar','baking','vanilla','yeast','cocoa','broth','stock','soup','can','canned','jar','condiment','dressing','seasoning','seasoning','hot sauce','soy sauce','coconut aminos','worcestershire','pickle','olive','relish','capers'],
+  'Health & Beauty':      ['shampoo','conditioner','body wash','toothpaste','deodorant','soap','lotion','sunscreen','vitamin','supplement','medicine','advil','tylenol','razor','floss','mouthwash','toilet paper','paper towel','tissue','tampon','pad','bandage','laundry','dish soap','detergent','cleaner','spray','bleach','zip lock','bag','wrap','foil','saran'],
+};
+
+function guessSection(name, sections) {
+  if (!name || !name.trim()) return '';
+  const lower = name.toLowerCase();
+  for (const [section, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
+    // Only suggest if that section actually exists in the store's sections list
+    const match = sections.find(s => s === section);
+    if (!match) continue;
+    if (keywords.some(kw => lower.includes(kw))) return match;
+  }
+  return ''; // blank if no good guess
+}
+
 // Seed data — only used once when Firebase doc doesn't exist yet
 const INITIAL_STORES = [
   {
@@ -85,12 +108,71 @@ const INITIAL_STORES = [
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function effectivePrice(item) {
   if (!item.price) return null;
+  // Fix 7: if sale has expired, ignore discount
+  if (item.discount && item.saleEnd) {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const end   = new Date(item.saleEnd); end.setHours(0,0,0,0);
+    if (end < today) return item.price; // sale expired
+  }
   return item.discount ? Math.max(0, item.price - item.discount) : item.price;
 }
-function totalCost(items) {
-  return items.filter(i => i.price && !i.bought).reduce((s, i) => s + effectivePrice(i) * i.qty, 0);
+
+// Fix 3: totalCost excludes 'Not Urgent' section
+function totalCost(items, excludeSection = 'Not Urgent') {
+  return items
+    .filter(i => i.price && !i.bought && i.section !== excludeSection)
+    .reduce((s, i) => s + effectivePrice(i) * i.qty, 0);
 }
+
 function uid() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
+
+// Fix 7: strip expired sales from a store's items
+function stripExpiredSales(items) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  return items.map(item => {
+    if (item.discount && item.saleEnd) {
+      const end = new Date(item.saleEnd); end.setHours(0,0,0,0);
+      if (end < today) {
+        return { ...item, discount: 0, saleEnd: '' };
+      }
+    }
+    return item;
+  });
+}
+
+// Fix 9: add next-week instances of weekly items that were bought
+function rePopulateWeeklyItems(store) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const nextId = Date.now();
+  let counter = 0;
+
+  // Weekly items that are bought and not already re-scheduled
+  const boughtWeekly = store.items.filter(i => i.bought && i.weekly);
+  if (!boughtWeekly.length) return store;
+
+  const existing = store.items.filter(i => !i.bought);
+  const newItems = [...store.items];
+
+  boughtWeekly.forEach(item => {
+    // Check if a non-bought copy already exists (avoid duplicates)
+    const alreadyPending = existing.some(e => e.name === item.name && e.weekly);
+    if (!alreadyPending) {
+      // Compute next occurrence: next calendar week same weekday, or simply +7 days from today
+      const nextDate = new Date(today);
+      nextDate.setDate(nextDate.getDate() + 7);
+      newItems.push({
+        ...item,
+        id: nextId + (counter++),
+        bought: false,
+        // tag with nextDue so UI can show it; strip discount if expired
+        discount: effectivePrice(item) !== item.price ? 0 : item.discount,
+        saleEnd: effectivePrice(item) !== item.price ? '' : item.saleEnd,
+      });
+    }
+  });
+
+  return { ...store, items: newItems };
+}
 
 // ─── CSV Export Helper ────────────────────────────────────────────────────────
 function exportToCSV(items, sections, storeName) {
@@ -100,11 +182,7 @@ function exportToCSV(items, sections, storeName) {
     its.forEach(item => {
       const eff = effectivePrice(item);
       rows.push([
-        storeName,
-        sec,
-        item.name,
-        item.qty,
-        item.size || '',
+        storeName, sec, item.name, item.qty, item.size || '',
         item.price != null ? item.price.toFixed(2) : '',
         item.discount ? item.discount.toFixed(2) : '',
         eff != null ? eff.toFixed(2) : '',
@@ -130,7 +208,7 @@ function exportToCSV(items, sections, storeName) {
 const GLOBAL_CSS = `
   * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
   html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #f2f2f7; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif; }
-  #root { height: 100%; }
+  #root { height: 100%; overflow: hidden; }
   input, select, button, textarea { font-family: inherit; }
   ::-webkit-scrollbar { display: none; }
   .ios-scroll { -webkit-overflow-scrolling: touch; overflow-y: auto; overscroll-behavior-y: contain; }
@@ -138,18 +216,30 @@ const GLOBAL_CSS = `
   @keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
   .sheet { animation: slideUp 0.32s cubic-bezier(0.32,0.72,0,1); }
   .fade  { animation: fadeIn  0.18s ease; }
-  .swipe-row { position: relative; overflow: hidden; }
-  .swipe-content { will-change: transform; transition: none; }
+  /* Fix 1: swipe-row must never overflow horizontally */
+  .swipe-row { position: relative; overflow: hidden; max-width: 100%; }
+  .swipe-content { will-change: transform; transition: none; max-width: 100%; }
   .swipe-content.snapping { transition: transform 0.2s cubic-bezier(0.34,1,0.64,1); }
-  .swipe-action-delete { position:absolute; right:0; top:0; bottom:0; width:80px; background:#FF3B30; display:flex; align-items:center; justify-content:center; color:#fff; font-size:13px; font-weight:600; flex-direction:column; gap:2px; }
+  /* Fix 2: delete action is now a confirm button, revealed on swipe but stays open */
+  .swipe-action-delete { position:absolute; right:0; top:0; bottom:0; width:80px; background:#FF3B30; display:flex; align-items:center; justify-content:center; color:#fff; font-size:13px; font-weight:600; flex-direction:column; gap:2px; cursor:pointer; }
   .swipe-action-check  { position:absolute; left:0;  top:0; bottom:0; width:80px; background:#34C759; display:flex; align-items:center; justify-content:center; color:#fff; font-size:13px; font-weight:600; flex-direction:column; gap:2px; }
   .safe-top    { padding-top: env(safe-area-inset-top, 0px); }
   .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
-  /* Fix iOS autofill / contact suggestions background */
   input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus {
     -webkit-text-fill-color: #000 !important;
     -webkit-box-shadow: 0 0 0 1000px #f2f2f7 inset !important;
     transition: background-color 5000s ease-in-out 0s;
+  }
+  /* Fix 8: lock to portrait */
+  @media screen and (orientation: landscape) {
+    body::before {
+      content: 'Please rotate your device to portrait';
+      position: fixed; inset: 0; background: #f2f2f7;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 600; color: #3c3c43;
+      z-index: 9999; text-align: center; padding: 20px;
+    }
+    #root { display: none; }
   }
 `;
 
@@ -208,130 +298,198 @@ function Sheet({ open, onClose, title, children, height='92vh' }) {
 
 function SaleTag({ item }) {
   if (!item.discount) return null;
-  const today = new Date();
+  // Fix 7: show as expired if past end date
+  const today = new Date(); today.setHours(0,0,0,0);
   const end   = item.saleEnd ? new Date(item.saleEnd) : null;
-  const expiring = end && ((end - today) / 864e5 < 7);
+  if (end) { end.setHours(0,0,0,0); }
+  const expired  = end && end < today;
+  const expiring = !expired && end && ((end - today) / 864e5 < 7);
   const endStr   = item.saleEnd ? ' ' + item.saleEnd.slice(5).replace('-','/') : '';
+  if (expired) return <Tag bg="#f2f2f7" color="#aeaeb2">sale ended</Tag>;
   return <Tag bg={expiring?'#fff3e0':'#e8f5e9'} color={expiring?'#C1440E':'#1a7a3a'}>-${item.discount.toFixed(2)}{endStr}</Tag>;
 }
 
-// ─── Swipeable Item Row ───────────────────────────────────────────────────────
+// ─── Swipeable Item Row (Fix 2: left=check immediate, right=reveal+confirm delete) ──
 function SwipeRow({ children, onDelete, onToggleBought, bought }) {
-  const rowRef  = useRef(null);
-  const startX  = useRef(null);
+  const rowRef   = useRef(null);
+  const startX   = useRef(null);
   const currentX = useRef(0);
-  const [revealed, setRevealed] = useState(null);
+  const [revealed, setRevealed] = useState(null); // null | 'check' | 'delete'
 
   function getContent() { return rowRef.current?.querySelector('.swipe-content'); }
 
+  function snapBack() {
+    const c = getContent();
+    if (!c) return;
+    c.classList.add('snapping');
+    c.style.transform = 'translateX(0)';
+  }
+
   function onTouchStart(e) {
-    startX.current = e.touches[0].clientX;
+    // If delete is already revealed, touches on the delete button are handled by its onClick
+    startX.current  = e.touches[0].clientX;
+    currentX.current = 0;
     const c = getContent();
     if (c) c.classList.remove('snapping');
   }
+
   function onTouchMove(e) {
     if (startX.current === null) return;
     const dx = e.touches[0].clientX - startX.current;
     currentX.current = dx;
     const c = getContent();
     if (!c) return;
-    const clamped = Math.max(-100, Math.min(80, dx));
+    // Right swipe (check): full range; left swipe (delete): clamp to -80 to reveal panel
+    const clamped = Math.max(-80, Math.min(80, dx));
     c.style.transform = `translateX(${clamped}px)`;
-    if (dx < -10) setRevealed('delete');
-    else if (dx > 10) setRevealed('check');
+    if (dx < -12) setRevealed('delete');
+    else if (dx > 12) setRevealed('check');
     else setRevealed(null);
   }
+
   function onTouchEnd() {
     const c = getContent();
     if (!c) return;
-    c.classList.add('snapping');
     const dx = currentX.current;
-    if (dx < -72) { c.style.transform='translateX(-100%)'; setTimeout(()=>onDelete(),200); }
-    else if (dx > 60) { c.style.transform='translateX(0)'; onToggleBought(); }
-    else { c.style.transform='translateX(0)'; }
-    setRevealed(null); startX.current=null; currentX.current=0;
+
+    if (dx > 60) {
+      // Right swipe far enough → immediate check/uncheck
+      c.classList.add('snapping');
+      c.style.transform = 'translateX(0)';
+      setRevealed(null);
+      onToggleBought();
+    } else if (dx < -60) {
+      // Left swipe far enough → REVEAL delete panel, stay open, wait for tap
+      c.classList.add('snapping');
+      c.style.transform = 'translateX(-80px)';
+      setRevealed('delete');
+    } else {
+      // Not far enough → snap back
+      snapBack();
+      setRevealed(null);
+    }
+    startX.current  = null;
+    currentX.current = 0;
+  }
+
+  function handleDeleteConfirm(e) {
+    e.stopPropagation();
+    const c = getContent();
+    if (c) { c.classList.add('snapping'); c.style.transform = 'translateX(-100%)'; }
+    setTimeout(() => onDelete(), 180);
+  }
+
+  // Tapping anywhere else on the row when delete is revealed snaps it back
+  function handleContentClick(e) {
+    if (revealed === 'delete') { snapBack(); setRevealed(null); }
   }
 
   return (
     <div ref={rowRef} className="swipe-row"
       onTouchStart={onTouchStart} onTouchMove={onTouchMove}
-      onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd}>
-      <div className="swipe-action-check"  style={{opacity:revealed==='check'?1:0,transition:'opacity 0.1s'}}>
+      onTouchEnd={onTouchEnd} onTouchCancel={()=>{ snapBack(); setRevealed(null); startX.current=null; }}>
+      <div className="swipe-action-check" style={{opacity:revealed==='check'?1:0,transition:'opacity 0.1s'}}>
         <span style={{fontSize:20}}>{bought?'↩':'✓'}</span>
         <span>{bought?'Undo':'Done'}</span>
       </div>
-      <div className="swipe-action-delete" style={{opacity:revealed==='delete'?1:0,transition:'opacity 0.1s'}}>
-        <span style={{fontSize:20}}>🗑</span><span>Delete</span>
+      {/* Delete panel: always rendered when revealed so tap works */}
+      <div className="swipe-action-delete"
+        onClick={revealed==='delete' ? handleDeleteConfirm : undefined}
+        style={{opacity:revealed==='delete'?1:0,transition:'opacity 0.1s',pointerEvents:revealed==='delete'?'auto':'none'}}>
+        <span style={{fontSize:20}}>🗑</span>
+        <span>Delete</span>
       </div>
-      <div className="swipe-content">{children}</div>
+      <div className="swipe-content" onClick={handleContentClick}>{children}</div>
     </div>
   );
 }
 
-// ─── Barcode Scanner ──────────────────────────────────────────────────────────
+// ─── Barcode Scanner (Fix 4: camera loads in a full-screen overlay properly) ──
 function BarcodeScanner({ onResult, onClose }) {
-  const videoRef   = useRef(null);
-  const streamRef  = useRef(null);
+  const videoRef    = useRef(null);
+  const streamRef   = useRef(null);
   const detectorRef = useRef(null);
-  const frameRef   = useRef(null);
-  const [status, setStatus]     = useState('starting');
+  const frameRef    = useRef(null);
+  const [status, setStatus]         = useState('starting');
   const [manualCode, setManualCode] = useState('');
   const [cameraReady, setCameraReady] = useState(false);
 
   useEffect(() => {
     let active = true;
+
     async function start() {
+      // Small delay so the DOM has painted the video element
+      await new Promise(r => setTimeout(r, 100));
+      if (!active) return;
+
+      if (!navigator.mediaDevices?.getUserMedia) {
+        if (active) setStatus('manual');
+        return;
+      }
+
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
         });
-        if (!active) { stream.getTracks().forEach(t=>t.stop()); return; }
+        if (!active) { stream.getTracks().forEach(t => t.stop()); return; }
         streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.onloadedmetadata = () => {
-            videoRef.current.play().catch(()=>{});
-            setCameraReady(true);
+
+        const video = videoRef.current;
+        if (video) {
+          video.srcObject = stream;
+          video.onloadedmetadata = () => {
+            if (!active) return;
+            video.play()
+              .then(() => { if (active) setCameraReady(true); })
+              .catch(() => { if (active) setCameraReady(true); }); // some browsers auto-play without promise resolve
           };
         }
+
         if ('BarcodeDetector' in window) {
           detectorRef.current = new window.BarcodeDetector({
             formats: ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','qr_code']
           });
-          setStatus('scanning');
+          if (active) setStatus('scanning');
         } else {
-          setStatus('manual');
+          if (active) setStatus('manual');
         }
       } catch (err) {
+        console.warn('Camera error:', err);
         if (active) setStatus('error');
       }
     }
+
     start();
     return () => {
       active = false;
       cancelAnimationFrame(frameRef.current);
-      streamRef.current?.getTracks().forEach(t=>t.stop());
+      streamRef.current?.getTracks().forEach(t => t.stop());
     };
   }, []);
 
   useEffect(() => {
     if (status !== 'scanning' || !cameraReady) return;
+    let active = true;
+
     async function detect() {
-      if (videoRef.current?.readyState >= 2 && detectorRef.current) {
+      if (!active) return;
+      const video = videoRef.current;
+      if (video && video.readyState >= 2 && detectorRef.current) {
         try {
-          const codes = await detectorRef.current.detect(videoRef.current);
+          const codes = await detectorRef.current.detect(video);
           if (codes.length > 0) {
             cancelAnimationFrame(frameRef.current);
-            streamRef.current?.getTracks().forEach(t=>t.stop());
+            streamRef.current?.getTracks().forEach(t => t.stop());
             lookupBarcode(codes[0].rawValue);
             return;
           }
         } catch {}
       }
-      frameRef.current = requestAnimationFrame(detect);
+      if (active) frameRef.current = requestAnimationFrame(detect);
     }
+
     frameRef.current = requestAnimationFrame(detect);
-    return () => cancelAnimationFrame(frameRef.current);
+    return () => { active = false; cancelAnimationFrame(frameRef.current); };
   }, [status, cameraReady]);
 
   async function lookupBarcode(code) {
@@ -341,96 +499,94 @@ function BarcodeScanner({ onResult, onClose }) {
       const data = await res.json();
       if (data.status === 1) {
         const p = data.product;
-        onResult({ barcode:code, name:p.product_name||'', size:p.quantity||'' });
+        onResult({ barcode: code, name: p.product_name || '', size: p.quantity || '' });
       } else {
-        onResult({ barcode:code, name:'', size:'' });
+        onResult({ barcode: code, name: '', size: '' });
       }
     } catch {
-      onResult({ barcode:code, name:'', size:'' });
+      onResult({ barcode: code, name: '', size: '' });
     }
   }
 
   return (
-    <div style={{padding:16}}>
-      {/* Always render the video element; hide it when not needed */}
+    <div style={{display:'flex',flexDirection:'column',height:'100%',background:'#000'}}>
+      {/* Camera viewport — always in DOM so stream can attach */}
       <div style={{
-        borderRadius:12, overflow:'hidden', background:'#000', aspectRatio:'4/3', marginBottom:12,
+        position:'relative',
+        flex: (status==='starting'||status==='scanning') ? 1 : '0 0 0px',
+        overflow:'hidden',
+        background:'#000',
         display: (status==='starting'||status==='scanning') ? 'block' : 'none',
-        position:'relative'
+        minHeight: (status==='starting'||status==='scanning') ? 260 : 0,
       }}>
         <video
           ref={videoRef}
-          autoPlay playsInline muted
+          autoPlay
+          playsInline
+          muted
           style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}}
         />
-        {/* Scanning overlay */}
         {status==='scanning' && (
-          <div style={{
-            position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',
-            pointerEvents:'none'
-          }}>
-            <div style={{
-              width:'65%',height:'30%',border:'2px solid rgba(255,255,255,0.8)',
-              borderRadius:8,boxShadow:'0 0 0 9999px rgba(0,0,0,0.35)'
-            }}/>
+          <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}>
+            <div style={{width:'65%',height:'30%',border:'2px solid rgba(255,255,255,0.85)',borderRadius:10,boxShadow:'0 0 0 9999px rgba(0,0,0,0.38)'}}/>
           </div>
         )}
         {!cameraReady && status==='starting' && (
-          <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:14}}>
-            Starting camera…
+          <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',background:'#000'}}>
+            <span style={{color:'#fff',fontSize:14}}>Starting camera…</span>
           </div>
         )}
       </div>
 
-      {status==='looking' && (
-        <p style={{textAlign:'center',padding:40,color:'#888'}}>Looking up barcode…</p>
-      )}
-      {status==='error' && (
-        <p style={{textAlign:'center',color:'#FF3B30',marginBottom:12,fontSize:14}}>
-          Camera unavailable. Enter barcode manually.
-        </p>
-      )}
-
-      {/* Manual entry — always available when not actively scanning */}
-      {(status==='manual'||status==='error'||status==='scanning') && (
-        <div style={{marginTop:8}}>
-          <p style={{fontSize:12,color:'#8e8e93',marginBottom:6}}>
-            {status==='scanning' ? 'Or enter barcode manually:' : 'Enter barcode:'}
+      <div style={{background:'#fff',padding:16,flex:1,overflowY:'auto'}}>
+        {status==='looking' && (
+          <p style={{textAlign:'center',padding:30,color:'#888'}}>Looking up barcode…</p>
+        )}
+        {status==='error' && (
+          <p style={{textAlign:'center',color:'#FF3B30',marginBottom:12,fontSize:14}}>
+            Camera unavailable — enter barcode below.
           </p>
-          <div style={{display:'flex',gap:8}}>
-            <input
-              value={manualCode}
-              onChange={e=>setManualCode(e.target.value)}
-              placeholder="0123456789012"
-              inputMode="numeric"
-              style={{flex:1,border:'1px solid #e5e5ea',borderRadius:10,padding:'9px 12px',fontSize:15,background:'#f2f2f7',outline:'none'}}
-            />
-            <button
-              onClick={()=>manualCode.trim()&&lookupBarcode(manualCode.trim())}
-              style={{background:B,color:'#fff',border:'none',borderRadius:10,padding:'0 16px',cursor:'pointer',fontSize:15,fontWeight:600}}>
-              Go
-            </button>
-          </div>
-        </div>
-      )}
+        )}
 
-      <button onClick={onClose} style={{
-        width:'100%',marginTop:14,background:'#f2f2f7',border:'none',
-        borderRadius:10,padding:12,fontSize:15,cursor:'pointer',color:'#3c3c43',fontWeight:500
-      }}>
-        Cancel
-      </button>
+        {(status==='manual'||status==='error'||status==='scanning') && (
+          <div style={{marginBottom:8}}>
+            <p style={{fontSize:12,color:'#8e8e93',marginBottom:6}}>
+              {status==='scanning' ? 'Or type barcode manually:' : 'Enter barcode:'}
+            </p>
+            <div style={{display:'flex',gap:8}}>
+              <input
+                value={manualCode}
+                onChange={e=>setManualCode(e.target.value)}
+                placeholder="0123456789012"
+                inputMode="numeric"
+                style={{flex:1,border:'1px solid #e5e5ea',borderRadius:10,padding:'9px 12px',fontSize:15,background:'#f2f2f7',outline:'none'}}
+              />
+              <button
+                onClick={()=>manualCode.trim()&&lookupBarcode(manualCode.trim())}
+                style={{background:B,color:'#fff',border:'none',borderRadius:10,padding:'0 16px',cursor:'pointer',fontSize:15,fontWeight:600}}>
+                Go
+              </button>
+            </div>
+          </div>
+        )}
+
+        <button onClick={onClose} style={{
+          width:'100%',marginTop:8,background:'#f2f2f7',border:'none',
+          borderRadius:10,padding:12,fontSize:15,cursor:'pointer',color:'#3c3c43',fontWeight:500
+        }}>
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }
 
-// ─── Item Form ────────────────────────────────────────────────────────────────
+// ─── Item Form (Fix 6: blank section default + smart guess) ──────────────────
 function ItemForm({ item, sections, memory, onSave, onDelete, defaultFilter }) {
-  // defaultFilter: 'weekly' | 'sale' | 'watchlist' | 'all'
   const notUrgent = sections.includes('Not Urgent') ? 'Not Urgent' : (sections[sections.length-1]||sections[0]||'');
   const defaultSection = (() => {
     if (defaultFilter === 'watchlist') return notUrgent;
-    return sections[0] || '';
+    return ''; // Fix 6: blank — user must pick or it's guessed on name entry
   })();
 
   const blank = {
@@ -438,30 +594,51 @@ function ItemForm({ item, sections, memory, onSave, onDelete, defaultFilter }) {
     discount:'', saleEnd:'', weekly: defaultFilter==='weekly', watch: defaultFilter==='watchlist',
     barcode:''
   };
-  const init  = item
+  const init = item
     ? {...item, price:item.price??'', discount:item.discount||'', saleEnd:item.saleEnd||''}
     : blank;
 
-  const [f, setF]         = useState(init);
+  const [f, setF]           = useState(init);
   const [saleOn, setSaleOn] = useState(item ? item.discount>0 : defaultFilter==='sale');
   const [showScanner, setShowScanner] = useState(false);
   const [expandedField, setExpandedField] = useState(null);
 
   const set = (k,v) => setF(p=>({...p,[k]:v}));
 
+  // Fix 6: auto-guess section when name changes (only if not already set by user)
+  function handleNameChange(val) {
+    set('name', val);
+    if (!item) { // only for new items
+      const guess = guessSection(val, sections);
+      if (guess) set('section', guess);
+    }
+  }
+
   function handleBarcodeResult({barcode,name,size}) {
     setShowScanner(false);
-    setF(p=>({...p, barcode, name:name||p.name, size:size||p.size}));
+    setF(p => {
+      const newName = name || p.name;
+      const guess   = (!item && name) ? guessSection(name, sections) : p.section;
+      return { ...p, barcode, name: newName, size: size||p.size, section: guess||p.section };
+    });
   }
 
   function handleSave() {
     if (!f.name.trim()) return;
+    // Fix 7: if sale is on but end date is past, turn off
+    let finalDiscount = saleOn ? (parseFloat(f.discount)||0) : 0;
+    let finalSaleEnd  = saleOn ? f.saleEnd : '';
+    if (finalDiscount && finalSaleEnd) {
+      const today = new Date(); today.setHours(0,0,0,0);
+      const end   = new Date(finalSaleEnd); end.setHours(0,0,0,0);
+      if (end < today) { finalDiscount = 0; finalSaleEnd = ''; }
+    }
     onSave({
       ...f,
-      qty:     parseInt(f.qty)||1,
-      price:   parseFloat(f.price)||null,
-      discount: saleOn?(parseFloat(f.discount)||0):0,
-      saleEnd:  saleOn?f.saleEnd:'',
+      qty:      parseInt(f.qty)||1,
+      price:    parseFloat(f.price)||null,
+      discount: finalDiscount,
+      saleEnd:  finalSaleEnd,
     });
   }
 
@@ -483,10 +660,10 @@ function ItemForm({ item, sections, memory, onSave, onDelete, defaultFilter }) {
           <span style={{fontSize:22}}>📷</span>
           <span>Scan</span>
         </button>
-        <div style={{flex:1}}>
+        <div style={{flex:1,minWidth:0}}>
           <input
             value={f.name}
-            onChange={e=>set('name',e.target.value)}
+            onChange={e=>handleNameChange(e.target.value)}
             placeholder="Item name"
             autoFocus={!item}
             autoComplete="off"
@@ -513,7 +690,10 @@ function ItemForm({ item, sections, memory, onSave, onDelete, defaultFilter }) {
         {/* Category */}
         <div style={rowStyle} onClick={()=>setExpandedField(expandedField==='section'?null:'section')}>
           <div style={labelStyle}><span style={{fontSize:20}}>🗂</span><span>Category</span></div>
-          <div style={valueStyle}><span>{f.section}</span><span style={{color:'#c7c7cc',fontSize:13}}>{expandedField==='section'?'▲':'▶'}</span></div>
+          <div style={valueStyle}>
+            <span style={{color:f.section?'#8e8e93':'#FF3B30'}}>{f.section||'Pick a category'}</span>
+            <span style={{color:'#c7c7cc',fontSize:13}}>{expandedField==='section'?'▲':'▶'}</span>
+          </div>
         </div>
         {expandedField==='section' && (
           <div style={{background:'#f9f9f9',borderBottom:'0.5px solid #e5e5ea',maxHeight:200,overflowY:'auto'}}>
@@ -629,8 +809,9 @@ function ItemForm({ item, sections, memory, onSave, onDelete, defaultFilter }) {
   );
 }
 
-// ─── Quick Add Bar ────────────────────────────────────────────────────────────
-function QuickAdd({ sections, memory, onQuickAdd, onOpenEdit, onScanBarcode, activeFilter }) {
+// ─── Quick Add Bar (Fix 5: Est. moved to search row) ─────────────────────────
+// Note: estTotal is now passed in and shown inside the search bar row
+function QuickAdd({ sections, memory, onQuickAdd, onOpenEdit, onScanBarcode, activeFilter, estTotal, storeColor }) {
   const [query,   setQuery]   = useState('');
   const [focused, setFocused] = useState(false);
   const inputRef = useRef(null);
@@ -646,10 +827,11 @@ function QuickAdd({ sections, memory, onQuickAdd, onOpenEdit, onScanBarcode, act
 
   function buildItem(name, mem) {
     const isWatchlist = activeFilter==='watchlist';
+    const baseSection = mem?.section || guessSection(name, sections) || sections[0] || '';
     return {
       id: Date.now(), name, qty:1,
       size:    mem?.size||'',
-      section: isWatchlist ? notUrgent : (mem?.section||sections[0]||''),
+      section: isWatchlist ? notUrgent : baseSection,
       price:   mem?.price||null,
       discount: 0, saleEnd: '',
       weekly:  activeFilter==='weekly',
@@ -672,12 +854,13 @@ function QuickAdd({ sections, memory, onQuickAdd, onOpenEdit, onScanBarcode, act
 
   return (
     <div style={{position:'relative',zIndex:50}}>
+      {/* Fix 5: single row with camera | search | est. cost */}
       <div style={{display:'flex',alignItems:'center',gap:6,padding:'6px 10px',background:'#fff',borderBottom:'0.5px solid #e5e5ea'}}>
         <button onClick={onScanBarcode} style={{
           background:B,color:'#fff',border:'none',borderRadius:8,
           width:32,height:32,cursor:'pointer',fontSize:15,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0
         }}>📷</button>
-        <span style={{color:'#c7c7cc',fontSize:18,lineHeight:1,fontWeight:300,flexShrink:0}}>|</span>
+        <span style={{color:'#c7c7cc',fontSize:16,lineHeight:1,fontWeight:300,flexShrink:0}}>|</span>
         <input
           ref={inputRef}
           value={query}
@@ -692,17 +875,23 @@ function QuickAdd({ sections, memory, onQuickAdd, onOpenEdit, onScanBarcode, act
           autoComplete="off"
           autoCorrect="off"
           spellCheck="false"
-          style={{flex:1,border:'none',outline:'none',fontSize:15,color:'#000',background:'transparent',padding:'4px 0'}}
+          style={{flex:1,border:'none',outline:'none',fontSize:15,color:'#000',background:'transparent',padding:'4px 0',minWidth:0}}
         />
         {query.trim() ? (
           <button onClick={()=>{setQuery('');inputRef.current?.focus();}}
             style={{background:'none',border:'none',color:'#8e8e93',fontSize:18,cursor:'pointer',padding:'0 2px',lineHeight:1,flexShrink:0}}>✕</button>
         ) : (
-          <button onClick={()=>onOpenEdit({id:null,name:'',qty:1,size:'',section:sections[0]||'',price:'',discount:'',saleEnd:'',weekly:activeFilter==='weekly',watch:activeFilter==='watchlist',barcode:''})}
+          <button onClick={()=>onOpenEdit({id:null,name:'',qty:1,size:'',section:'',price:'',discount:'',saleEnd:'',weekly:activeFilter==='weekly',watch:activeFilter==='watchlist',barcode:''})}
             style={{background:B,color:'#fff',border:'none',borderRadius:8,width:32,height:32,cursor:'pointer',fontSize:18,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontWeight:300}}>
             +
           </button>
         )}
+        <span style={{color:'#c7c7cc',fontSize:16,lineHeight:1,fontWeight:300,flexShrink:0}}>|</span>
+        {/* Fix 5: Est. cost here */}
+        <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',flexShrink:0}}>
+          <span style={{fontSize:9,color:'#8e8e93',lineHeight:1}}>Est.</span>
+          <span style={{fontSize:13,fontWeight:700,color:storeColor||B,lineHeight:1.2}}>${estTotal.toFixed(2)}</span>
+        </div>
       </div>
 
       {focused && query.trim().length > 0 && (
@@ -717,7 +906,7 @@ function QuickAdd({ sections, memory, onQuickAdd, onOpenEdit, onScanBarcode, act
             <span style={{fontSize:15,color:B,fontWeight:500}}>Add "{query.trim()}"</span>
             <button
               onPointerDown={e=>{e.stopPropagation();e.preventDefault();
-                onOpenEdit({id:null,name:query.trim(),qty:1,size:'',section:sections[0]||'',price:'',discount:'',saleEnd:'',weekly:activeFilter==='weekly',watch:activeFilter==='watchlist',barcode:''});
+                onOpenEdit({id:null,name:query.trim(),qty:1,size:'',section:guessSection(query.trim(),sections)||'',price:'',discount:'',saleEnd:'',weekly:activeFilter==='weekly',watch:activeFilter==='watchlist',barcode:''});
                 setQuery('');setFocused(false);
               }}
               style={{background:'none',border:'none',cursor:'pointer',padding:'4px 6px',fontSize:16,color:'#c7c7cc'}}>✏️</button>
@@ -738,8 +927,8 @@ function QuickAdd({ sections, memory, onQuickAdd, onOpenEdit, onScanBarcode, act
                 <button
                   onPointerDown={e=>{e.stopPropagation();e.preventDefault();
                     const existing = mem
-                      ? {id:null,name,qty:1,size:mem.size||'',section:mem.section||sections[0]||'',price:mem.price||'',discount:'',saleEnd:'',weekly:activeFilter==='weekly',watch:activeFilter==='watchlist',barcode:mem.barcode||''}
-                      : {id:null,name,qty:1,size:'',section:sections[0]||'',price:'',discount:'',saleEnd:'',weekly:activeFilter==='weekly',watch:activeFilter==='watchlist',barcode:''};
+                      ? {id:null,name,qty:1,size:mem.size||'',section:mem.section||guessSection(name,sections)||'',price:mem.price||'',discount:'',saleEnd:'',weekly:activeFilter==='weekly',watch:activeFilter==='watchlist',barcode:mem.barcode||''}
+                      : {id:null,name,qty:1,size:'',section:guessSection(name,sections)||'',price:'',discount:'',saleEnd:'',weekly:activeFilter==='weekly',watch:activeFilter==='watchlist',barcode:''};
                     onOpenEdit(existing);
                     setQuery('');setFocused(false);
                   }}
@@ -857,30 +1046,23 @@ function ExportView({ items, sections, storeName }) {
   );
 }
 
-// ─── Trips Screen — now as separate named lists ───────────────────────────────
-// Each "trip" is an independent list with its own items (cloned from the master store list)
-// trips: [{ id, label, date, items: [...] }]
-
+// ─── Trips Screen ─────────────────────────────────────────────────────────────
 function TripsScreen({ store, onUpdateStore }) {
-  const [view,       setView]       = useState('list'); // 'list' | 'edit-meta' | 'shopping'
+  const [view,         setView]         = useState('list');
   const [activeTripId, setActiveTripId] = useState(null);
-  const [editingMeta,  setEditingMeta]  = useState(null); // {id,label,date} or null (new)
-  const [metaLabel,  setMetaLabel]  = useState('');
-  const [metaDate,   setMetaDate]   = useState('');
+  const [editingMeta,  setEditingMeta]  = useState(null);
+  const [metaLabel,    setMetaLabel]    = useState('');
+  const [metaDate,     setMetaDate]     = useState('');
 
   const trips = store.trips || [];
 
-  function saveTrips(updated) {
-    onUpdateStore({...store, trips: updated});
-  }
+  function saveTrips(updated) { onUpdateStore({...store, trips: updated}); }
 
   function createTrip() {
-    const label = metaLabel.trim() || `${store.name} — ${metaDate.slice(5).replace('-','/')}`;
-    const date  = metaDate || new Date().toISOString().slice(0,10);
-    // Clone master items as a starting point
+    const label  = metaLabel.trim() || `${store.name} — ${metaDate.slice(5).replace('-','/')}`;
+    const date   = metaDate || new Date().toISOString().slice(0,10);
     const cloned = store.items.filter(i=>!i.bought).map(i=>({...i, bought:false}));
-    const trip = { id: uid(), label, date, items: cloned };
-    saveTrips([...trips, trip]);
+    saveTrips([...trips, { id: uid(), label, date, items: cloned }]);
     setView('list');
   }
 
@@ -890,29 +1072,18 @@ function TripsScreen({ store, onUpdateStore }) {
     setView('list'); setEditingMeta(null);
   }
 
-  function deleteTrip(id) {
-    saveTrips(trips.filter(t=>t.id!==id));
-    setView('list');
-  }
-
-  function updateTripItems(tripId, newItems) {
-    saveTrips(trips.map(t=>t.id===tripId?{...t,items:newItems}:t));
-  }
+  function deleteTrip(id) { saveTrips(trips.filter(t=>t.id!==id)); setView('list'); }
+  function updateTripItems(tripId, newItems) { saveTrips(trips.map(t=>t.id===tripId?{...t,items:newItems}:t)); }
 
   const activeTrip = trips.find(t=>t.id===activeTripId);
 
-  // ── Trip shopping view ──
   if (view==='shopping' && activeTrip) {
-    const sections = store.sections;
-    const items    = activeTrip.items;
+    const sections  = store.sections;
+    const items     = activeTrip.items;
     const remaining = items.filter(i=>!i.bought).length;
 
-    function toggleBought(id) {
-      updateTripItems(activeTrip.id, items.map(i=>i.id===id?{...i,bought:!i.bought}:i));
-    }
-    function deleteItem(id) {
-      updateTripItems(activeTrip.id, items.filter(i=>i.id!==id));
-    }
+    function toggleBought(id) { updateTripItems(activeTrip.id, items.map(i=>i.id===id?{...i,bought:!i.bought}:i)); }
+    function deleteItem(id)   { updateTripItems(activeTrip.id, items.filter(i=>i.id!==id)); }
 
     return (
       <div style={{paddingBottom:16}}>
@@ -938,19 +1109,16 @@ function TripsScreen({ store, onUpdateStore }) {
                 {its.map(item=>{
                   const eff = effectivePrice(item);
                   return (
-                    <SwipeRow key={item.id} bought={item.bought}
-                      onDelete={()=>deleteItem(item.id)}
-                      onToggleBought={()=>toggleBought(item.id)}>
+                    <SwipeRow key={item.id} bought={item.bought} onDelete={()=>deleteItem(item.id)} onToggleBought={()=>toggleBought(item.id)}>
                       <div onClick={()=>toggleBought(item.id)} style={{
-                        background:item.bought?'#f9f9f9':'#fff',
-                        padding:'10px 14px',borderBottom:'0.5px solid #f2f2f7',
+                        background:item.bought?'#f9f9f9':'#fff',padding:'10px 14px',borderBottom:'0.5px solid #f2f2f7',
                         display:'flex',alignItems:'center',gap:10,cursor:'pointer'
                       }}>
                         <div style={{width:22,height:22,borderRadius:'50%',border:`2px solid ${item.bought?'#34C759':'#c7c7cc'}`,
                           background:item.bought?'#34C759':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                           {item.bought&&<span style={{color:'#fff',fontSize:13,fontWeight:700}}>✓</span>}
                         </div>
-                        <div style={{flex:1}}>
+                        <div style={{flex:1,minWidth:0}}>
                           <span style={{fontSize:15,fontWeight:500,color:item.bought?'#aeaeb2':'#000',textDecoration:item.bought?'line-through':'none'}}>{item.name}</span>
                           {item.qty>1&&<span style={{fontSize:12,color:'#8e8e93',marginLeft:4}}>×{item.qty}</span>}
                           {item.size&&<span style={{fontSize:11,color:'#8e8e93',marginLeft:4}}>{item.size}</span>}
@@ -968,7 +1136,6 @@ function TripsScreen({ store, onUpdateStore }) {
     );
   }
 
-  // ── New / edit trip meta ──
   if (view==='edit-meta') {
     const isNew = !editingMeta;
     return (
@@ -978,31 +1145,21 @@ function TripsScreen({ store, onUpdateStore }) {
           <span style={{fontSize:17,fontWeight:600}}>{isNew?'New Trip':'Edit Trip'}</span>
         </div>
         <div style={{fontSize:12,color:'#8e8e93',marginBottom:4,fontWeight:500,textTransform:'uppercase',letterSpacing:0.4}}>Trip Name</div>
-        <input
-          value={metaLabel} onChange={e=>setMetaLabel(e.target.value)}
-          placeholder={`e.g. ${store.name} — Big Stock-up`}
-          autoComplete="off" autoCorrect="off"
-          style={{width:'100%',border:'1px solid #e5e5ea',borderRadius:10,padding:'9px 12px',fontSize:15,marginBottom:12,background:'#f2f2f7',outline:'none',boxSizing:'border-box'}}
-        />
+        <input value={metaLabel} onChange={e=>setMetaLabel(e.target.value)}
+          placeholder={`e.g. ${store.name} — Big Stock-up`} autoComplete="off" autoCorrect="off"
+          style={{width:'100%',border:'1px solid #e5e5ea',borderRadius:10,padding:'9px 12px',fontSize:15,marginBottom:12,background:'#f2f2f7',outline:'none',boxSizing:'border-box'}} />
         <div style={{fontSize:12,color:'#8e8e93',marginBottom:4,fontWeight:500,textTransform:'uppercase',letterSpacing:0.4}}>Date</div>
         <input type="date" value={metaDate} onChange={e=>setMetaDate(e.target.value)}
           style={{width:'100%',border:'1px solid #e5e5ea',borderRadius:10,padding:'9px 12px',fontSize:15,marginBottom:16,background:'#f2f2f7',outline:'none',boxSizing:'border-box'}} />
-        {isNew && (
-          <p style={{fontSize:13,color:'#8e8e93',margin:'0 0 16px'}}>
-            Your current active items will be copied into this trip as a starting point. You can then edit that trip's list independently.
-          </p>
-        )}
+        {isNew && <p style={{fontSize:13,color:'#8e8e93',margin:'0 0 16px'}}>Your current active items will be copied into this trip as a starting point.</p>}
         <div style={{display:'flex',gap:8}}>
-          <button onClick={()=>setView('list')}
-            style={{flex:1,background:'#f2f2f7',border:'none',borderRadius:10,padding:12,fontSize:15,cursor:'pointer',color:'#3c3c43'}}>Cancel</button>
-          <button onClick={isNew?createTrip:updateTripMeta}
-            style={{flex:2,background:B,color:'#fff',border:'none',borderRadius:10,padding:12,fontSize:15,fontWeight:600,cursor:'pointer'}}>
+          <button onClick={()=>setView('list')} style={{flex:1,background:'#f2f2f7',border:'none',borderRadius:10,padding:12,fontSize:15,cursor:'pointer',color:'#3c3c43'}}>Cancel</button>
+          <button onClick={isNew?createTrip:updateTripMeta} style={{flex:2,background:B,color:'#fff',border:'none',borderRadius:10,padding:12,fontSize:15,fontWeight:600,cursor:'pointer'}}>
             {isNew?'Create Trip':'Save'}
           </button>
         </div>
         {!isNew && (
-          <button onClick={()=>deleteTrip(editingMeta.id)}
-            style={{width:'100%',marginTop:10,background:'none',color:'#FF3B30',border:'1px solid #FF3B30',borderRadius:10,padding:12,fontSize:15,cursor:'pointer'}}>
+          <button onClick={()=>deleteTrip(editingMeta.id)} style={{width:'100%',marginTop:10,background:'none',color:'#FF3B30',border:'1px solid #FF3B30',borderRadius:10,padding:12,fontSize:15,cursor:'pointer'}}>
             Delete Trip
           </button>
         )}
@@ -1010,27 +1167,19 @@ function TripsScreen({ store, onUpdateStore }) {
     );
   }
 
-  // ── Trip list ──
   return (
     <div style={{padding:'8px 16px 16px'}}>
-      <p style={{fontSize:13,color:'#8e8e93',margin:'0 0 12px'}}>
-        Each trip is an independent list. Creating a trip copies your current active items as a starting point.
-      </p>
+      <p style={{fontSize:13,color:'#8e8e93',margin:'0 0 12px'}}>Each trip is an independent list. Creating a trip copies your current active items as a starting point.</p>
       {trips.length===0&&<p style={{textAlign:'center',color:'#8e8e93',fontSize:14,padding:'20px 0'}}>No trips yet. Create one below!</p>}
       <div style={{background:'#fff',borderRadius:12,overflow:'hidden',marginBottom:12}}>
         {trips.map((t,i)=>{
           const rem = (t.items||[]).filter(i=>!i.bought).length;
           const est = totalCost(t.items||[]);
           return (
-            <div key={t.id} style={{
-              display:'flex',alignItems:'center',gap:12,padding:'12px 14px',
-              borderBottom:i<trips.length-1?'0.5px solid #e5e5ea':'none',
-            }}>
+            <div key={t.id} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderBottom:i<trips.length-1?'0.5px solid #e5e5ea':'none'}}>
               <div style={{flex:1,cursor:'pointer'}} onClick={()=>{setActiveTripId(t.id);setView('shopping');}}>
                 <div style={{fontSize:15,fontWeight:600,color:'#000'}}>{t.label}</div>
-                <div style={{fontSize:12,color:'#8e8e93',marginTop:2}}>
-                  {t.date} · {rem} item{rem!==1?'s':''} · Est. ${est.toFixed(2)}
-                </div>
+                <div style={{fontSize:12,color:'#8e8e93',marginTop:2}}>{t.date} · {rem} item{rem!==1?'s':''} · Est. ${est.toFixed(2)}</div>
               </div>
               <button onClick={()=>{setEditingMeta(t);setMetaLabel(t.label);setMetaDate(t.date);setView('edit-meta');}}
                 style={{background:'#f2f2f7',border:'none',borderRadius:8,padding:'5px 10px',fontSize:13,cursor:'pointer',color:'#3c3c43',fontWeight:500}}>Edit</button>
@@ -1049,7 +1198,7 @@ function TripsScreen({ store, onUpdateStore }) {
 
 // ─── Store Picker ─────────────────────────────────────────────────────────────
 function StorePicker({ stores, onClose, onCreateTrip }) {
-  const [step, setStep]       = useState('pick');
+  const [step, setStep]             = useState('pick');
   const [chosenStore, setChosenStore] = useState(null);
   const [tripDate,    setTripDate]    = useState(new Date().toISOString().slice(0,10));
   const [tripLabel,   setTripLabel]   = useState('');
@@ -1064,8 +1213,7 @@ function StorePicker({ stores, onClose, onCreateTrip }) {
         </div>
         <div style={{fontSize:12,color:'#8e8e93',marginBottom:6,fontWeight:500,textTransform:'uppercase',letterSpacing:0.4}}>Trip Name</div>
         <input value={tripLabel} onChange={e=>setTripLabel(e.target.value)}
-          placeholder={`${store.name} — ${tripDate.slice(5).replace('-','/')}`}
-          autoComplete="off" autoCorrect="off"
+          placeholder={`${store.name} — ${tripDate.slice(5).replace('-','/')}`} autoComplete="off" autoCorrect="off"
           style={{width:'100%',border:'1px solid #e5e5ea',borderRadius:10,padding:'9px 12px',fontSize:15,marginBottom:12,background:'#f2f2f7',outline:'none',boxSizing:'border-box'}} />
         <div style={{fontSize:12,color:'#8e8e93',marginBottom:6,fontWeight:500,textTransform:'uppercase',letterSpacing:0.4}}>Trip Date</div>
         <input type="date" value={tripDate} onChange={e=>setTripDate(e.target.value)}
@@ -1073,9 +1221,7 @@ function StorePicker({ stores, onClose, onCreateTrip }) {
         <div style={{display:'flex',gap:8}}>
           <button onClick={()=>setStep('pick')} style={{flex:1,background:'#f2f2f7',border:'none',borderRadius:10,padding:12,fontSize:15,cursor:'pointer',color:'#3c3c43'}}>Back</button>
           <button onClick={()=>{onCreateTrip(chosenStore,tripDate,tripLabel.trim());onClose();}}
-            style={{flex:2,background:B,color:'#fff',border:'none',borderRadius:10,padding:12,fontSize:15,fontWeight:600,cursor:'pointer'}}>
-            Create Trip
-          </button>
+            style={{flex:2,background:B,color:'#fff',border:'none',borderRadius:10,padding:12,fontSize:15,fontWeight:600,cursor:'pointer'}}>Create Trip</button>
         </div>
       </div>
     );
@@ -1105,7 +1251,7 @@ function StorePicker({ stores, onClose, onCreateTrip }) {
 
 // ─── Store List Screen ────────────────────────────────────────────────────────
 function StoreListScreen({ stores, onSelectStore, onAddStore, onEditStore, onCreateTrip }) {
-  const [editingStore, setEditingStore] = useState(null);
+  const [editingStore, setEditingStore]   = useState(null);
   const [showTripPicker, setShowTripPicker] = useState(false);
 
   const STORE_COLORS = ['#007AFF','#FF9500','#FF3B30','#34C759','#AF52DE','#FF2D55','#5AC8FA','#FF6B35'];
@@ -1117,17 +1263,10 @@ function StoreListScreen({ stores, onSelectStore, onAddStore, onEditStore, onCre
     return (
       <div style={{padding:'8px 16px 24px'}}>
         <div style={{fontSize:12,color:'#8e8e93',marginBottom:4,fontWeight:500,textTransform:'uppercase',letterSpacing:0.4}}>Store Name</div>
-        <input
-          value={f.name}
-          onChange={e=>setF(p=>({...p,name:e.target.value}))}
-          placeholder="e.g. Costco Burnaby"
-          autoComplete="off"
-          autoCorrect="off"
-          autoCapitalize="words"
-          spellCheck="false"
+        <input value={f.name} onChange={e=>setF(p=>({...p,name:e.target.value}))} placeholder="e.g. Costco Burnaby"
+          autoComplete="off" autoCorrect="off" autoCapitalize="words" spellCheck="false"
           style={{width:'100%',border:'1px solid #e5e5ea',borderRadius:10,padding:'9px 12px',fontSize:15,marginBottom:12,background:'#f2f2f7',outline:'none',boxSizing:'border-box',color:'#000'}}
-          autoFocus
-        />
+          autoFocus />
         <div style={{fontSize:12,color:'#8e8e93',marginBottom:6,fontWeight:500,textTransform:'uppercase',letterSpacing:0.4}}>Color</div>
         <div style={{display:'flex',gap:8,marginBottom:14,flexWrap:'wrap'}}>
           {STORE_COLORS.map(c=>(
@@ -1255,7 +1394,7 @@ function StoreListScreen({ stores, onSelectStore, onAddStore, onEditStore, onCre
 }
 
 // ─── Shopping List Screen ─────────────────────────────────────────────────────
-const LIST_VIEWS  = ['Active','All','Done'];
+const LIST_VIEWS   = ['Active','All','Done'];
 const CHIP_FILTERS = [{k:'all',l:'All'},{k:'weekly',l:'Weekly'},{k:'sale',l:'On Sale'},{k:'watchlist',l:'Watch List'}];
 
 function ShoppingListScreen({ store, onBack, onUpdateStore }) {
@@ -1274,6 +1413,21 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
 
   const tapCounts = useRef({});
   const tapTimers = useRef({});
+
+  // Fix 7: strip expired sales on mount and when store changes
+  useEffect(() => {
+    const cleaned = stripExpiredSales(store.items);
+    const changed = cleaned.some((item,i) => item.discount !== store.items[i].discount);
+    if (changed) onUpdateStore({...store, items: cleaned});
+  }, [store.id]); // run once per store load
+
+  // Fix 9: auto re-populate weekly items on app open
+  useEffect(() => {
+    const repopulated = rePopulateWeeklyItems(store);
+    if (repopulated.items.length !== store.items.length) {
+      onUpdateStore(repopulated);
+    }
+  }, [store.id]);
 
   const items    = store.items;
   const sections = store.sections;
@@ -1329,13 +1483,13 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
   })();
 
   const remaining = items.filter(i=>!i.bought).length;
+  // Fix 3: est total excludes Not Urgent
   const estTotal  = totalCost(items);
 
   const notUrgent = sections.includes('Not Urgent') ? 'Not Urgent' : (sections[sections.length-1]||sections[0]||'');
 
   function saveItem(data) {
     const isNew = !data.id || !items.find(i=>i.id===data.id);
-    // If filter is active, enforce the flag
     let finalData = {...data};
     if(filter==='weekly')    finalData.weekly = true;
     if(filter==='sale')      finalData.discount = finalData.discount || 0;
@@ -1359,7 +1513,6 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
   }
 
   function handleQuickAdd(newItem) {
-    // Respect active filter
     let item = {...newItem};
     if(filter==='weekly')    item.weekly=true;
     if(filter==='watchlist') { item.watch=true; item.section=notUrgent; }
@@ -1370,9 +1523,7 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
     updateStore({items:[...items,item],memory:newMemory});
   }
 
-  function handleOpenEditFromQuick(partialItem) {
-    setEditingItem(partialItem); setSheet('edit');
-  }
+  function handleOpenEditFromQuick(partialItem) { setEditingItem(partialItem); setSheet('edit'); }
 
   function reAddWeekly(item) {
     const fresh = {...item,id:nextId.current++,bought:false};
@@ -1386,46 +1537,51 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
       handleQuickAdd({
         id:Date.now(),name:result.name,qty:1,
         size:result.size||mem?.size||'',
-        section:mem?.section||sections[0]||'',
+        section:mem?.section||guessSection(result.name,sections)||sections[0]||'',
         price:mem?.price||null,discount:0,saleEnd:'',weekly:false,watch:false,
         barcode:result.barcode||'',bought:false,
       });
     } else {
-      setEditingItem({id:null,name:'',qty:1,size:result.size||'',section:sections[0]||'',price:'',discount:'',saleEnd:'',weekly:false,watch:false,barcode:result.barcode});
+      setEditingItem({id:null,name:'',qty:1,size:result.size||'',section:'',price:'',discount:'',saleEnd:'',weekly:false,watch:false,barcode:result.barcode});
       setSheet('edit');
     }
   }
 
-  if(showBarcodeScanner) {
-    return (
-      <div style={{background:'#000',height:'100%',display:'flex',flexDirection:'column'}}>
-        <style>{GLOBAL_CSS}</style>
-        <div style={{background:'rgba(0,0,0,0.85)',padding:'calc(env(safe-area-inset-top,0px) + 12px) 16px 12px',display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
-          <button onClick={()=>setShowBarcodeScanner(false)} style={{background:'rgba(255,255,255,0.15)',border:'none',color:'#fff',fontSize:15,cursor:'pointer',padding:'6px 14px',borderRadius:8}}>✕ Cancel</button>
-          <span style={{color:'rgba(255,255,255,0.7)',fontSize:13}}>Point camera at barcode</span>
-        </div>
-        <div style={{flex:1,background:'#fff',overflow:'auto'}}>
-          <BarcodeScanner onResult={handleBarcodeForQuickAdd} onClose={()=>setShowBarcodeScanner(false)} />
-        </div>
-      </div>
-    );
-  }
-
+  // Fix 4: barcode scanner as full-screen overlay, not a page swap
   return (
-    <div style={{background:'#f2f2f7',height:'100%',display:'flex',flexDirection:'column',overflow:'hidden',width:'100%'}}>
+    <div style={{background:'#f2f2f7',height:'100%',display:'flex',flexDirection:'column',overflow:'hidden',width:'100%',maxWidth:'100%',position:'relative'}}>
       <style>{GLOBAL_CSS}</style>
+
+      {/* Fix 4: Camera overlay rendered on top when active */}
+      {showBarcodeScanner && (
+        <div style={{position:'absolute',inset:0,zIndex:500,background:'#000',display:'flex',flexDirection:'column'}}>
+          <div style={{
+            background:'rgba(0,0,0,0.85)',
+            padding:'calc(env(safe-area-inset-top,0px) + 12px) 16px 12px',
+            display:'flex',alignItems:'center',gap:8,flexShrink:0
+          }}>
+            <button onClick={()=>setShowBarcodeScanner(false)} style={{background:'rgba(255,255,255,0.15)',border:'none',color:'#fff',fontSize:15,cursor:'pointer',padding:'6px 14px',borderRadius:8}}>✕ Cancel</button>
+            <span style={{color:'rgba(255,255,255,0.7)',fontSize:13}}>Point camera at barcode</span>
+          </div>
+          <div style={{flex:1,overflow:'hidden'}}>
+            <BarcodeScanner onResult={handleBarcodeForQuickAdd} onClose={()=>setShowBarcodeScanner(false)} />
+          </div>
+        </div>
+      )}
 
       {/* Header */}
       <div style={{
         background:'rgba(255,255,255,0.96)',backdropFilter:'blur(20px)',WebkitBackdropFilter:'blur(20px)',
-        borderBottom:'0.5px solid rgba(60,60,67,0.18)',flexShrink:0,width:'100%',
+        borderBottom:'0.5px solid rgba(60,60,67,0.18)',flexShrink:0,
+        width:'100%',maxWidth:'100%',
         paddingTop:'calc(env(safe-area-inset-top, 0px) + 4px)'
       }}>
-        <div style={{display:'flex',alignItems:'center',padding:'6px 12px 4px'}}>
+        {/* Title row */}
+        <div style={{display:'flex',alignItems:'center',padding:'6px 12px 4px',width:'100%',boxSizing:'border-box'}}>
           <button onClick={onBack} style={{background:'none',border:'none',color:B,fontSize:15,cursor:'pointer',padding:'4px 8px 4px 0',display:'flex',alignItems:'center',gap:2,flexShrink:0}}>
             <span style={{fontSize:18,lineHeight:1}}>‹</span> Lists
           </button>
-          <div style={{flex:1,textAlign:'center',minWidth:0}}>
+          <div style={{flex:1,textAlign:'center',minWidth:0,overflow:'hidden'}}>
             <div style={{fontSize:16,fontWeight:600,color:'#000',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
               {store.icon} {store.name}
             </div>
@@ -1434,7 +1590,8 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
           <button onClick={()=>setSheet('export')} style={{background:'none',border:'none',color:B,fontSize:14,fontWeight:500,cursor:'pointer',padding:'4px 0 4px 8px',flexShrink:0}}>Export</button>
         </div>
 
-        <div style={{display:'flex',alignItems:'center',padding:'2px 10px 6px',gap:6,overflowX:'auto'}}>
+        {/* Fix 5: Filter chips row — Est. cost removed from here, moved into QuickAdd */}
+        <div style={{display:'flex',alignItems:'center',padding:'2px 10px 6px',gap:6,width:'100%',boxSizing:'border-box',overflowX:'auto'}}>
           <select value={listView} onChange={e=>setListView(e.target.value)}
             style={{
               border:'none',background:'none',color:B,fontSize:14,fontWeight:700,cursor:'pointer',outline:'none',
@@ -1445,7 +1602,7 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
             {LIST_VIEWS.map(v=><option key={v} value={v}>{v}</option>)}
           </select>
           <span style={{color:'#e5e5ea',fontSize:16,flexShrink:0}}>|</span>
-          <div style={{display:'flex',gap:5,overflowX:'auto',flex:1}}>
+          <div style={{display:'flex',gap:5,flex:1,overflowX:'auto'}}>
             {CHIP_FILTERS.map(cf=>(
               <button key={cf.k} onClick={()=>setFilter(cf.k)} style={{
                 border:filter===cf.k?'none':'0.5px solid #c7c7cc',
@@ -1456,12 +1613,9 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
               }}>{cf.l}</button>
             ))}
           </div>
-          <div style={{display:'flex',alignItems:'center',gap:3,flexShrink:0}}>
-            <span style={{fontSize:11,color:'#8e8e93'}}>Est.</span>
-            <span style={{fontSize:14,fontWeight:700,color:store.color}}>${estTotal.toFixed(2)}</span>
-          </div>
         </div>
 
+        {/* Fix 5: QuickAdd row now contains Est. cost */}
         <QuickAdd
           sections={sections}
           memory={store.memory}
@@ -1469,11 +1623,17 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
           onOpenEdit={handleOpenEditFromQuick}
           onScanBarcode={()=>setShowBarcodeScanner(true)}
           activeFilter={filter}
+          estTotal={estTotal}
+          storeColor={store.color}
         />
       </div>
 
-      {/* List */}
-      <div className="ios-scroll" style={{flex:1,overflowY:'auto',paddingBottom:'calc(env(safe-area-inset-bottom,0px) + 60px)',width:'100%'}}>
+      {/* Fix 1: List scroll area — strict width containment */}
+      <div className="ios-scroll" style={{
+        flex:1,overflowY:'auto',overflowX:'hidden',
+        paddingBottom:'calc(env(safe-area-inset-bottom,0px) + 60px)',
+        width:'100%',maxWidth:'100%',boxSizing:'border-box'
+      }}>
         {visibleItems.length===0&&(
           <div style={{textAlign:'center',padding:'40px 24px',color:'#8e8e93',fontSize:15}}>
             {filter!=='all'
@@ -1488,16 +1648,16 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
           const its = visibleItems.filter(i=>i.section===sec);
           if(!its.length) return null;
           return (
-            <div key={sec}>
+            <div key={sec} style={{width:'100%',maxWidth:'100%',overflow:'hidden'}}>
               <div style={{background:store.color,padding:'5px 14px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
                 <span style={{fontSize:12,fontWeight:700,color:'#fff',textTransform:'uppercase',letterSpacing:0.6}}>{sec}</span>
                 <span style={{fontSize:11,color:'rgba(255,255,255,0.75)',fontWeight:500}}>{its.length}</span>
               </div>
               {its.map((item,idx)=>{
-                const eff     = effectivePrice(item);
+                const eff       = effectivePrice(item);
                 const lineTotal = eff ? eff*item.qty : null;
-                const isDrag  = draggingId===item.id;
-                const isOver  = dragOverId===item.id && draggingId!==null;
+                const isDrag    = draggingId===item.id;
+                const isOver    = dragOverId===item.id && draggingId!==null;
                 return (
                   <SwipeRow key={item.id} bought={item.bought}
                     onDelete={()=>deleteItem(item.id)}
@@ -1518,9 +1678,9 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
                         transform:isDrag?'scale(1.01)':'scale(1)',
                         transition:'transform 0.1s, opacity 0.1s',
                         touchAction:'pan-y',userSelect:'none',cursor:'pointer',
-                        minWidth:0,width:'100%',boxSizing:'border-box',
+                        width:'100%',maxWidth:'100%',boxSizing:'border-box',minWidth:0,
                       }}>
-                      <div style={{flex:1,minWidth:0}}>
+                      <div style={{flex:1,minWidth:0,overflow:'hidden'}}>
                         <div style={{
                           fontSize:15,fontWeight:item.bought?400:500,
                           display:'flex',alignItems:'center',gap:5,flexWrap:'wrap',
@@ -1629,12 +1789,11 @@ function LoadingScreen() {
 
 // ─── Root App ─────────────────────────────────────────────────────────────────
 export default function App() {
-  const [stores,        setStores]        = useState(null); // null = loading
+  const [stores,        setStores]        = useState(null);
   const [activeStoreId, setActiveStoreId] = useState(null);
   const [fbReady,       setFbReady]       = useState(false);
   const unsubRef = useRef(null);
 
-  // ── Firebase init ──
   useEffect(() => {
     async function init() {
       try {
@@ -1642,19 +1801,14 @@ export default function App() {
         const ref  = doc(db, HH_DOC);
         const snap = await getDoc(ref);
         if (!snap.exists()) {
-          // First run — seed with INITIAL_STORES
           await setDoc(ref, { stores: INITIAL_STORES });
         }
-        // Subscribe to real-time updates
         unsubRef.current = onSnapshot(ref, docSnap => {
-          if (docSnap.exists()) {
-            setStores(docSnap.data().stores || []);
-          }
+          if (docSnap.exists()) setStores(docSnap.data().stores || []);
         });
         setFbReady(true);
       } catch (err) {
         console.error('Firebase init error:', err);
-        // Fallback to local state so app still works
         setStores(INITIAL_STORES);
         setFbReady(true);
       }
@@ -1663,7 +1817,6 @@ export default function App() {
     return () => unsubRef.current?.();
   }, []);
 
-  // Write stores to Firebase whenever they change (after initial load)
   const isFirstWrite = useRef(true);
   useEffect(() => {
     if (!fbReady || stores === null) return;
