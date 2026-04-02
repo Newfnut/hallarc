@@ -52,7 +52,6 @@ const COMMON_ITEMS = [
 ];
 
 // ─── Smart category guesser ───────────────────────────────────────────────────
-// Maps keywords → section names (matches DEFAULT_SECTIONS)
 const CATEGORY_KEYWORDS = {
   'Produce':              ['apple','banana','orange','strawberr','blueberr','grape','lemon','lime','avocado','tomato','spinach','arugula','kale','lettuce','broccoli','cauliflower','carrot','celery','cucumber','pepper','mushroom','onion','garlic','potato','sweet potato','corn','zucchini','asparagus','mango','pineapple','peach','plum','pear','berry','berries','herb','ginger','beet','radish','leek','shallot','fennel','cabbage','brussels','artichoke','eggplant','squash','cantaloupe','watermelon','melon','cilantro','parsley','basil','mint','thyme','rosemary','dill','chive'],
   'Dairy':                ['milk','cheese','butter','cream','yogurt','egg','sour cream','cheddar','mozzarella','parmesan','brie','feta','gouda','ricotta','cottage','half and half','whipping'],
@@ -62,7 +61,7 @@ const CATEGORY_KEYWORDS = {
   'Frozen Foods':         ['frozen','ice cream','popsicle','pizza','edamame'],
   'Beverages':            ['juice','water','coffee','tea','soda','pop','lemonade','kombucha','sparkling','energy drink','beer','wine','cider','milk alternative','oat milk','almond milk','soy milk'],
   'Grains, Pasta & Sides':['pasta','rice','quinoa','oatmeal','cereal','granola','bread crumb','noodle','couscous','barley','lentil','oat','flour','cornmeal','grits','polenta','cracker','pretzel','chip'],
-  'Pantry':               ['oil','vinegar','sauce','ketchup','mustard','mayo','salsa','peanut butter','jam','honey','maple','syrup','spice','salt','pepper','sugar','baking','vanilla','yeast','cocoa','broth','stock','soup','can','canned','jar','condiment','dressing','seasoning','seasoning','hot sauce','soy sauce','coconut aminos','worcestershire','pickle','olive','relish','capers'],
+  'Pantry':               ['oil','vinegar','sauce','ketchup','mustard','mayo','salsa','peanut butter','jam','honey','maple','syrup','spice','salt','pepper','sugar','baking','vanilla','yeast','cocoa','broth','stock','soup','can','canned','jar','condiment','dressing','seasoning','hot sauce','soy sauce','coconut aminos','worcestershire','pickle','olive','relish','capers'],
   'Health & Beauty':      ['shampoo','conditioner','body wash','toothpaste','deodorant','soap','lotion','sunscreen','vitamin','supplement','medicine','advil','tylenol','razor','floss','mouthwash','toilet paper','paper towel','tissue','tampon','pad','bandage','laundry','dish soap','detergent','cleaner','spray','bleach','zip lock','bag','wrap','foil','saran'],
 };
 
@@ -70,15 +69,13 @@ function guessSection(name, sections) {
   if (!name || !name.trim()) return '';
   const lower = name.toLowerCase();
   for (const [section, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-    // Only suggest if that section actually exists in the store's sections list
     const match = sections.find(s => s === section);
     if (!match) continue;
     if (keywords.some(kw => lower.includes(kw))) return match;
   }
-  return ''; // blank if no good guess
+  return '';
 }
 
-// Seed data — only used once when Firebase doc doesn't exist yet
 const INITIAL_STORES = [
   {
     id: 's1', name: 'Costco Langley', color: '#007AFF', icon: '🛒',
@@ -90,7 +87,6 @@ const INITIAL_STORES = [
       {id:4,name:'Eggs Extra Large',qty:4,size:'',section:'Dairy',price:9.99,discount:0,saleEnd:'',weekly:true,watch:false,barcode:'',bought:false},
       {id:5,name:'Greek Yogurt',qty:2,size:'1.36kg',section:'Dairy',price:8.99,discount:0,saleEnd:'',weekly:false,watch:false,barcode:'',bought:false},
     ],
-    trips: [],
     memory: {}
   },
   {
@@ -100,7 +96,6 @@ const INITIAL_STORES = [
       {id:101,name:'Milk 3.25%',qty:2,size:'4L',section:'Dairy',price:6.99,discount:0,saleEnd:'',weekly:true,watch:false,barcode:'',bought:false},
       {id:102,name:'Sourdough',qty:1,size:'',section:'Bakery',price:4.49,discount:0,saleEnd:'',weekly:false,watch:false,barcode:'',bought:false},
     ],
-    trips: [],
     memory: {}
   },
 ];
@@ -108,16 +103,14 @@ const INITIAL_STORES = [
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function effectivePrice(item) {
   if (!item.price) return null;
-  // Fix 7: if sale has expired, ignore discount
   if (item.discount && item.saleEnd) {
     const today = new Date(); today.setHours(0,0,0,0);
     const end   = new Date(item.saleEnd); end.setHours(0,0,0,0);
-    if (end < today) return item.price; // sale expired
+    if (end < today) return item.price;
   }
   return item.discount ? Math.max(0, item.price - item.discount) : item.price;
 }
 
-// Fix 3: totalCost excludes 'Not Urgent' section
 function totalCost(items, excludeSection = 'Not Urgent') {
   return items
     .filter(i => i.price && !i.bought && i.section !== excludeSection)
@@ -126,52 +119,15 @@ function totalCost(items, excludeSection = 'Not Urgent') {
 
 function uid() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
 
-// Fix 7: strip expired sales from a store's items
 function stripExpiredSales(items) {
   const today = new Date(); today.setHours(0,0,0,0);
   return items.map(item => {
     if (item.discount && item.saleEnd) {
       const end = new Date(item.saleEnd); end.setHours(0,0,0,0);
-      if (end < today) {
-        return { ...item, discount: 0, saleEnd: '' };
-      }
+      if (end < today) return { ...item, discount: 0, saleEnd: '' };
     }
     return item;
   });
-}
-
-// Fix 9: add next-week instances of weekly items that were bought
-function rePopulateWeeklyItems(store) {
-  const today = new Date(); today.setHours(0,0,0,0);
-  const nextId = Date.now();
-  let counter = 0;
-
-  // Weekly items that are bought and not already re-scheduled
-  const boughtWeekly = store.items.filter(i => i.bought && i.weekly);
-  if (!boughtWeekly.length) return store;
-
-  const existing = store.items.filter(i => !i.bought);
-  const newItems = [...store.items];
-
-  boughtWeekly.forEach(item => {
-    // Check if a non-bought copy already exists (avoid duplicates)
-    const alreadyPending = existing.some(e => e.name === item.name && e.weekly);
-    if (!alreadyPending) {
-      // Compute next occurrence: next calendar week same weekday, or simply +7 days from today
-      const nextDate = new Date(today);
-      nextDate.setDate(nextDate.getDate() + 7);
-      newItems.push({
-        ...item,
-        id: nextId + (counter++),
-        bought: false,
-        // tag with nextDue so UI can show it; strip discount if expired
-        discount: effectivePrice(item) !== item.price ? 0 : item.discount,
-        saleEnd: effectivePrice(item) !== item.price ? '' : item.saleEnd,
-      });
-    }
-  });
-
-  return { ...store, items: newItems };
 }
 
 // ─── CSV Export Helper ────────────────────────────────────────────────────────
@@ -216,30 +172,17 @@ const GLOBAL_CSS = `
   @keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
   .sheet { animation: slideUp 0.32s cubic-bezier(0.32,0.72,0,1); }
   .fade  { animation: fadeIn  0.18s ease; }
-  /* Fix 1: swipe-row must never overflow horizontally */
-  .swipe-row { position: relative; overflow: hidden; max-width: 100%; }
-  .swipe-content { will-change: transform; transition: none; max-width: 100%; }
+  .swipe-row { position: relative; overflow: hidden; width: 100%; }
+  .swipe-content { will-change: transform; transition: none; width: 100%; }
   .swipe-content.snapping { transition: transform 0.2s cubic-bezier(0.34,1,0.64,1); }
-  /* Fix 2: delete action is now a confirm button, revealed on swipe but stays open */
-  .swipe-action-delete { position:absolute; right:0; top:0; bottom:0; width:80px; background:#FF3B30; display:flex; align-items:center; justify-content:center; color:#fff; font-size:13px; font-weight:600; flex-direction:column; gap:2px; cursor:pointer; }
-  .swipe-action-check  { position:absolute; left:0;  top:0; bottom:0; width:80px; background:#34C759; display:flex; align-items:center; justify-content:center; color:#fff; font-size:13px; font-weight:600; flex-direction:column; gap:2px; }
+  .swipe-action-delete { position:absolute; right:0; top:0; bottom:0; width:20vw; min-width:72px; background:#FF3B30; display:flex; align-items:center; justify-content:center; color:#fff; font-size:13px; font-weight:600; flex-direction:column; gap:2px; cursor:pointer; }
+  .swipe-action-check  { position:absolute; left:0;  top:0; bottom:0; width:20vw; min-width:72px; background:#34C759; display:flex; align-items:center; justify-content:center; color:#fff; font-size:13px; font-weight:600; flex-direction:column; gap:2px; }
   .safe-top    { padding-top: env(safe-area-inset-top, 0px); }
   .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
   input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus {
     -webkit-text-fill-color: #000 !important;
     -webkit-box-shadow: 0 0 0 1000px #f2f2f7 inset !important;
     transition: background-color 5000s ease-in-out 0s;
-  }
-  /* Fix 8: lock to portrait */
-  @media screen and (orientation: landscape) {
-    body::before {
-      content: 'Please rotate your device to portrait';
-      position: fixed; inset: 0; background: #f2f2f7;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 18px; font-weight: 600; color: #3c3c43;
-      z-index: 9999; text-align: center; padding: 20px;
-    }
-    #root { display: none; }
   }
 `;
 
@@ -298,7 +241,6 @@ function Sheet({ open, onClose, title, children, height='92vh' }) {
 
 function SaleTag({ item }) {
   if (!item.discount) return null;
-  // Fix 7: show as expired if past end date
   const today = new Date(); today.setHours(0,0,0,0);
   const end   = item.saleEnd ? new Date(item.saleEnd) : null;
   if (end) { end.setHours(0,0,0,0); }
@@ -309,12 +251,14 @@ function SaleTag({ item }) {
   return <Tag bg={expiring?'#fff3e0':'#e8f5e9'} color={expiring?'#C1440E':'#1a7a3a'}>-${item.discount.toFixed(2)}{endStr}</Tag>;
 }
 
-// ─── Swipeable Item Row (Fix 2: left=check immediate, right=reveal+confirm delete) ──
+// ─── Swipeable Item Row ────────────────────────────────────────────────────────
+// Delete panel is 20vw wide, revealed on left swipe, tappable to confirm delete
 function SwipeRow({ children, onDelete, onToggleBought, bought }) {
   const rowRef   = useRef(null);
   const startX   = useRef(null);
   const currentX = useRef(0);
-  const [revealed, setRevealed] = useState(null); // null | 'check' | 'delete'
+  const [revealed, setRevealed] = useState(null);
+  const DELETE_W = Math.max(72, Math.round(window.innerWidth * 0.20));
 
   function getContent() { return rowRef.current?.querySelector('.swipe-content'); }
 
@@ -323,10 +267,10 @@ function SwipeRow({ children, onDelete, onToggleBought, bought }) {
     if (!c) return;
     c.classList.add('snapping');
     c.style.transform = 'translateX(0)';
+    setRevealed(null);
   }
 
   function onTouchStart(e) {
-    // If delete is already revealed, touches on the delete button are handled by its onClick
     startX.current  = e.touches[0].clientX;
     currentX.current = 0;
     const c = getContent();
@@ -339,8 +283,7 @@ function SwipeRow({ children, onDelete, onToggleBought, bought }) {
     currentX.current = dx;
     const c = getContent();
     if (!c) return;
-    // Right swipe (check): full range; left swipe (delete): clamp to -80 to reveal panel
-    const clamped = Math.max(-80, Math.min(80, dx));
+    const clamped = Math.max(-DELETE_W, Math.min(DELETE_W, dx));
     c.style.transform = `translateX(${clamped}px)`;
     if (dx < -12) setRevealed('delete');
     else if (dx > 12) setRevealed('check');
@@ -353,20 +296,16 @@ function SwipeRow({ children, onDelete, onToggleBought, bought }) {
     const dx = currentX.current;
 
     if (dx > 60) {
-      // Right swipe far enough → immediate check/uncheck
       c.classList.add('snapping');
       c.style.transform = 'translateX(0)';
       setRevealed(null);
       onToggleBought();
-    } else if (dx < -60) {
-      // Left swipe far enough → REVEAL delete panel, stay open, wait for tap
+    } else if (dx < -(DELETE_W * 0.6)) {
       c.classList.add('snapping');
-      c.style.transform = 'translateX(-80px)';
+      c.style.transform = `translateX(-${DELETE_W}px)`;
       setRevealed('delete');
     } else {
-      // Not far enough → snap back
       snapBack();
-      setRevealed(null);
     }
     startX.current  = null;
     currentX.current = 0;
@@ -374,29 +313,35 @@ function SwipeRow({ children, onDelete, onToggleBought, bought }) {
 
   function handleDeleteConfirm(e) {
     e.stopPropagation();
+    e.preventDefault();
     const c = getContent();
     if (c) { c.classList.add('snapping'); c.style.transform = 'translateX(-100%)'; }
     setTimeout(() => onDelete(), 180);
   }
 
-  // Tapping anywhere else on the row when delete is revealed snaps it back
-  function handleContentClick(e) {
-    if (revealed === 'delete') { snapBack(); setRevealed(null); }
+  function handleContentClick() {
+    if (revealed === 'delete') { snapBack(); }
   }
 
   return (
     <div ref={rowRef} className="swipe-row"
       onTouchStart={onTouchStart} onTouchMove={onTouchMove}
-      onTouchEnd={onTouchEnd} onTouchCancel={()=>{ snapBack(); setRevealed(null); startX.current=null; }}>
+      onTouchEnd={onTouchEnd}
+      onTouchCancel={() => { snapBack(); startX.current = null; }}>
       <div className="swipe-action-check" style={{opacity:revealed==='check'?1:0,transition:'opacity 0.1s'}}>
-        <span style={{fontSize:20}}>{bought?'↩':'✓'}</span>
+        <span style={{fontSize:22}}>{bought?'↩':'✓'}</span>
         <span>{bought?'Undo':'Done'}</span>
       </div>
-      {/* Delete panel: always rendered when revealed so tap works */}
-      <div className="swipe-action-delete"
-        onClick={revealed==='delete' ? handleDeleteConfirm : undefined}
-        style={{opacity:revealed==='delete'?1:0,transition:'opacity 0.1s',pointerEvents:revealed==='delete'?'auto':'none'}}>
-        <span style={{fontSize:20}}>🗑</span>
+      <div
+        className="swipe-action-delete"
+        onTouchEnd={revealed === 'delete' ? handleDeleteConfirm : undefined}
+        onClick={revealed === 'delete' ? handleDeleteConfirm : undefined}
+        style={{
+          opacity: revealed === 'delete' ? 1 : 0,
+          transition: 'opacity 0.1s',
+          pointerEvents: revealed === 'delete' ? 'auto' : 'none',
+        }}>
+        <span style={{fontSize:24}}>🗑</span>
         <span>Delete</span>
       </div>
       <div className="swipe-content" onClick={handleContentClick}>{children}</div>
@@ -404,22 +349,24 @@ function SwipeRow({ children, onDelete, onToggleBought, bought }) {
   );
 }
 
-// ─── Barcode Scanner (Fix 4: camera loads in a full-screen overlay properly) ──
+// ─── Barcode Scanner ──────────────────────────────────────────────────────────
+// Uses a visible <video> element; iOS Safari requires the video to be in the DOM
+// with autoPlay + playsInline + muted to allow getUserMedia to work.
 function BarcodeScanner({ onResult, onClose }) {
   const videoRef    = useRef(null);
   const streamRef   = useRef(null);
   const detectorRef = useRef(null);
   const frameRef    = useRef(null);
-  const [status, setStatus]         = useState('starting');
-  const [manualCode, setManualCode] = useState('');
+  const [status, setStatus]           = useState('starting');
+  const [manualCode, setManualCode]   = useState('');
   const [cameraReady, setCameraReady] = useState(false);
 
   useEffect(() => {
     let active = true;
 
     async function start() {
-      // Small delay so the DOM has painted the video element
-      await new Promise(r => setTimeout(r, 100));
+      // Give DOM time to paint the video element
+      await new Promise(r => setTimeout(r, 200));
       if (!active) return;
 
       if (!navigator.mediaDevices?.getUserMedia) {
@@ -428,20 +375,31 @@ function BarcodeScanner({ onResult, onClose }) {
       }
 
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
-        });
+        const constraints = {
+          video: {
+            facingMode: { ideal: 'environment' },
+            width:  { ideal: 1280 },
+            height: { ideal: 720 },
+          }
+        };
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
         if (!active) { stream.getTracks().forEach(t => t.stop()); return; }
         streamRef.current = stream;
 
         const video = videoRef.current;
         if (video) {
           video.srcObject = stream;
-          video.onloadedmetadata = () => {
+          // iOS Safari needs explicit play() call after srcObject is set
+          video.onloadedmetadata = async () => {
             if (!active) return;
-            video.play()
-              .then(() => { if (active) setCameraReady(true); })
-              .catch(() => { if (active) setCameraReady(true); }); // some browsers auto-play without promise resolve
+            try { await video.play(); } catch {}
+            if (active) setCameraReady(true);
+          };
+          // Fallback: some browsers fire oncanplay instead
+          video.oncanplay = async () => {
+            if (!active || cameraReady) return;
+            try { await video.play(); } catch {}
+            if (active) setCameraReady(true);
           };
         }
 
@@ -508,17 +466,20 @@ function BarcodeScanner({ onResult, onClose }) {
     }
   }
 
+  const showCamera = status === 'starting' || status === 'scanning';
+
   return (
     <div style={{display:'flex',flexDirection:'column',height:'100%',background:'#000'}}>
-      {/* Camera viewport — always in DOM so stream can attach */}
+      {/* Video element — always in DOM so stream can attach; hidden only when not needed */}
       <div style={{
         position:'relative',
-        flex: (status==='starting'||status==='scanning') ? 1 : '0 0 0px',
+        flex: showCamera ? 1 : '0 0 0px',
         overflow:'hidden',
         background:'#000',
-        display: (status==='starting'||status==='scanning') ? 'block' : 'none',
-        minHeight: (status==='starting'||status==='scanning') ? 260 : 0,
+        minHeight: showCamera ? 260 : 0,
+        display: showCamera ? 'block' : 'none',
       }}>
+        {/* CRITICAL for iOS: autoPlay playsInline muted must all be present */}
         <video
           ref={videoRef}
           autoPlay
@@ -526,43 +487,43 @@ function BarcodeScanner({ onResult, onClose }) {
           muted
           style={{width:'100%',height:'100%',objectFit:'cover',display:'block'}}
         />
-        {status==='scanning' && (
+        {status === 'scanning' && (
           <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}>
             <div style={{width:'65%',height:'30%',border:'2px solid rgba(255,255,255,0.85)',borderRadius:10,boxShadow:'0 0 0 9999px rgba(0,0,0,0.38)'}}/>
           </div>
         )}
-        {!cameraReady && status==='starting' && (
-          <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',background:'#000'}}>
+        {!cameraReady && status === 'starting' && (
+          <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.7)'}}>
             <span style={{color:'#fff',fontSize:14}}>Starting camera…</span>
           </div>
         )}
       </div>
 
       <div style={{background:'#fff',padding:16,flex:1,overflowY:'auto'}}>
-        {status==='looking' && (
+        {status === 'looking' && (
           <p style={{textAlign:'center',padding:30,color:'#888'}}>Looking up barcode…</p>
         )}
-        {status==='error' && (
+        {status === 'error' && (
           <p style={{textAlign:'center',color:'#FF3B30',marginBottom:12,fontSize:14}}>
             Camera unavailable — enter barcode below.
           </p>
         )}
 
-        {(status==='manual'||status==='error'||status==='scanning') && (
+        {(status === 'manual' || status === 'error' || status === 'scanning') && (
           <div style={{marginBottom:8}}>
             <p style={{fontSize:12,color:'#8e8e93',marginBottom:6}}>
-              {status==='scanning' ? 'Or type barcode manually:' : 'Enter barcode:'}
+              {status === 'scanning' ? 'Or type barcode manually:' : 'Enter barcode:'}
             </p>
             <div style={{display:'flex',gap:8}}>
               <input
                 value={manualCode}
-                onChange={e=>setManualCode(e.target.value)}
+                onChange={e => setManualCode(e.target.value)}
                 placeholder="0123456789012"
                 inputMode="numeric"
                 style={{flex:1,border:'1px solid #e5e5ea',borderRadius:10,padding:'9px 12px',fontSize:15,background:'#f2f2f7',outline:'none'}}
               />
               <button
-                onClick={()=>manualCode.trim()&&lookupBarcode(manualCode.trim())}
+                onClick={() => manualCode.trim() && lookupBarcode(manualCode.trim())}
                 style={{background:B,color:'#fff',border:'none',borderRadius:10,padding:'0 16px',cursor:'pointer',fontSize:15,fontWeight:600}}>
                 Go
               </button>
@@ -581,13 +542,10 @@ function BarcodeScanner({ onResult, onClose }) {
   );
 }
 
-// ─── Item Form (Fix 6: blank section default + smart guess) ──────────────────
+// ─── Item Form ────────────────────────────────────────────────────────────────
 function ItemForm({ item, sections, memory, onSave, onDelete, defaultFilter }) {
   const notUrgent = sections.includes('Not Urgent') ? 'Not Urgent' : (sections[sections.length-1]||sections[0]||'');
-  const defaultSection = (() => {
-    if (defaultFilter === 'watchlist') return notUrgent;
-    return ''; // Fix 6: blank — user must pick or it's guessed on name entry
-  })();
+  const defaultSection = defaultFilter === 'watchlist' ? notUrgent : '';
 
   const blank = {
     name:'', qty:1, size:'', section:defaultSection, price:'',
@@ -605,10 +563,9 @@ function ItemForm({ item, sections, memory, onSave, onDelete, defaultFilter }) {
 
   const set = (k,v) => setF(p=>({...p,[k]:v}));
 
-  // Fix 6: auto-guess section when name changes (only if not already set by user)
   function handleNameChange(val) {
     set('name', val);
-    if (!item) { // only for new items
+    if (!item) {
       const guess = guessSection(val, sections);
       if (guess) set('section', guess);
     }
@@ -625,7 +582,6 @@ function ItemForm({ item, sections, memory, onSave, onDelete, defaultFilter }) {
 
   function handleSave() {
     if (!f.name.trim()) return;
-    // Fix 7: if sale is on but end date is past, turn off
     let finalDiscount = saleOn ? (parseFloat(f.discount)||0) : 0;
     let finalSaleEnd  = saleOn ? f.saleEnd : '';
     if (finalDiscount && finalSaleEnd) {
@@ -650,7 +606,6 @@ function ItemForm({ item, sections, memory, onSave, onDelete, defaultFilter }) {
 
   return (
     <div style={{paddingBottom:24}}>
-      {/* Name hero */}
       <div style={{background:'#fff',borderRadius:12,margin:'12px 16px',padding:'14px 14px',display:'flex',alignItems:'flex-start',gap:12,boxShadow:'0 1px 3px rgba(0,0,0,0.06)'}}>
         <button onClick={()=>setShowScanner(true)} style={{
           width:56,height:56,borderRadius:10,background:'#f2f2f7',border:'none',cursor:'pointer',
@@ -683,11 +638,8 @@ function ItemForm({ item, sections, memory, onSave, onDelete, defaultFilter }) {
         <button onClick={()=>set('watch',!f.watch)} style={{background:'none',border:'none',cursor:'pointer',padding:4,fontSize:22,opacity:f.watch?1:0.3,flexShrink:0}}>★</button>
       </div>
 
-      {/* Info section */}
       <div style={{margin:'0 16px 8px',fontSize:12,color:'#8e8e93',fontWeight:600,textTransform:'uppercase',letterSpacing:0.5}}>Info</div>
       <div style={{background:'#fff',borderRadius:12,margin:'0 16px',overflow:'hidden',boxShadow:'0 1px 3px rgba(0,0,0,0.06)'}}>
-
-        {/* Category */}
         <div style={rowStyle} onClick={()=>setExpandedField(expandedField==='section'?null:'section')}>
           <div style={labelStyle}><span style={{fontSize:20}}>🗂</span><span>Category</span></div>
           <div style={valueStyle}>
@@ -707,7 +659,6 @@ function ItemForm({ item, sections, memory, onSave, onDelete, defaultFilter }) {
           </div>
         )}
 
-        {/* Quantity */}
         <div style={rowStyle}>
           <div style={labelStyle}><span style={{fontSize:20}}>🔢</span><span>Quantity</span></div>
           <div style={{display:'flex',alignItems:'center',gap:0}}>
@@ -719,7 +670,6 @@ function ItemForm({ item, sections, memory, onSave, onDelete, defaultFilter }) {
           </div>
         </div>
 
-        {/* Price */}
         <div style={rowStyle} onClick={()=>setExpandedField(expandedField==='price'?null:'price')}>
           <div style={labelStyle}><span style={{fontSize:20}}>💰</span><span>Price</span></div>
           <div style={valueStyle}>
@@ -736,7 +686,6 @@ function ItemForm({ item, sections, memory, onSave, onDelete, defaultFilter }) {
           </div>
         )}
 
-        {/* Barcode */}
         <div style={{...rowStyle,borderBottom:'none'}} onClick={()=>setExpandedField(expandedField==='barcode'?null:'barcode')}>
           <div style={labelStyle}><span style={{fontSize:20}}>▋▋</span><span>Barcode</span></div>
           <div style={valueStyle}>
@@ -755,7 +704,6 @@ function ItemForm({ item, sections, memory, onSave, onDelete, defaultFilter }) {
         )}
       </div>
 
-      {/* Options */}
       <div style={{margin:'16px 16px 8px',fontSize:12,color:'#8e8e93',fontWeight:600,textTransform:'uppercase',letterSpacing:0.5}}>Options</div>
       <div style={{background:'#fff',borderRadius:12,margin:'0 16px',overflow:'hidden',boxShadow:'0 1px 3px rgba(0,0,0,0.06)'}}>
         {[
@@ -809,8 +757,7 @@ function ItemForm({ item, sections, memory, onSave, onDelete, defaultFilter }) {
   );
 }
 
-// ─── Quick Add Bar (Fix 5: Est. moved to search row) ─────────────────────────
-// Note: estTotal is now passed in and shown inside the search bar row
+// ─── Quick Add Bar ────────────────────────────────────────────────────────────
 function QuickAdd({ sections, memory, onQuickAdd, onOpenEdit, onScanBarcode, activeFilter, estTotal, storeColor }) {
   const [query,   setQuery]   = useState('');
   const [focused, setFocused] = useState(false);
@@ -854,7 +801,6 @@ function QuickAdd({ sections, memory, onQuickAdd, onOpenEdit, onScanBarcode, act
 
   return (
     <div style={{position:'relative',zIndex:50}}>
-      {/* Fix 5: single row with camera | search | est. cost */}
       <div style={{display:'flex',alignItems:'center',gap:6,padding:'6px 10px',background:'#fff',borderBottom:'0.5px solid #e5e5ea'}}>
         <button onClick={onScanBarcode} style={{
           background:B,color:'#fff',border:'none',borderRadius:8,
@@ -887,7 +833,6 @@ function QuickAdd({ sections, memory, onQuickAdd, onOpenEdit, onScanBarcode, act
           </button>
         )}
         <span style={{color:'#c7c7cc',fontSize:16,lineHeight:1,fontWeight:300,flexShrink:0}}>|</span>
-        {/* Fix 5: Est. cost here */}
         <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',flexShrink:0}}>
           <span style={{fontSize:9,color:'#8e8e93',lineHeight:1}}>Est.</span>
           <span style={{fontSize:13,fontWeight:700,color:storeColor||B,lineHeight:1.2}}>${estTotal.toFixed(2)}</span>
@@ -1046,219 +991,51 @@ function ExportView({ items, sections, storeName }) {
   );
 }
 
-// ─── Trips Screen ─────────────────────────────────────────────────────────────
-function TripsScreen({ store, onUpdateStore }) {
-  const [view,         setView]         = useState('list');
-  const [activeTripId, setActiveTripId] = useState(null);
-  const [editingMeta,  setEditingMeta]  = useState(null);
-  const [metaLabel,    setMetaLabel]    = useState('');
-  const [metaDate,     setMetaDate]     = useState('');
-
-  const trips = store.trips || [];
-
-  function saveTrips(updated) { onUpdateStore({...store, trips: updated}); }
-
-  function createTrip() {
-    const label  = metaLabel.trim() || `${store.name} — ${metaDate.slice(5).replace('-','/')}`;
-    const date   = metaDate || new Date().toISOString().slice(0,10);
-    const cloned = store.items.filter(i=>!i.bought).map(i=>({...i, bought:false}));
-    saveTrips([...trips, { id: uid(), label, date, items: cloned }]);
-    setView('list');
-  }
-
-  function updateTripMeta() {
-    const label = metaLabel.trim() || editingMeta.label;
-    saveTrips(trips.map(t=>t.id===editingMeta.id?{...t,label,date:metaDate||t.date}:t));
-    setView('list'); setEditingMeta(null);
-  }
-
-  function deleteTrip(id) { saveTrips(trips.filter(t=>t.id!==id)); setView('list'); }
-  function updateTripItems(tripId, newItems) { saveTrips(trips.map(t=>t.id===tripId?{...t,items:newItems}:t)); }
-
-  const activeTrip = trips.find(t=>t.id===activeTripId);
-
-  if (view==='shopping' && activeTrip) {
-    const sections  = store.sections;
-    const items     = activeTrip.items;
-    const remaining = items.filter(i=>!i.bought).length;
-
-    function toggleBought(id) { updateTripItems(activeTrip.id, items.map(i=>i.id===id?{...i,bought:!i.bought}:i)); }
-    function deleteItem(id)   { updateTripItems(activeTrip.id, items.filter(i=>i.id!==id)); }
-
-    return (
-      <div style={{paddingBottom:16}}>
-        <div style={{padding:'10px 16px 0',display:'flex',alignItems:'center',gap:10}}>
-          <button onClick={()=>setView('list')} style={{background:'none',border:'none',color:B,fontSize:15,cursor:'pointer',padding:0}}>‹ Back</button>
-          <div style={{flex:1}}>
-            <div style={{fontSize:15,fontWeight:600,color:'#000'}}>{activeTrip.label}</div>
-            <div style={{fontSize:12,color:'#8e8e93'}}>{remaining} of {items.length} remaining · Est. ${totalCost(items).toFixed(2)}</div>
-          </div>
-          <button onClick={()=>exportToCSV(items.filter(i=>!i.bought),sections,activeTrip.label)}
-            style={{background:'#f2f2f7',border:'none',borderRadius:8,padding:'5px 10px',fontSize:12,cursor:'pointer',color:'#3c3c43'}}>CSV</button>
-        </div>
-        <div style={{marginTop:8}}>
-          {sections.map(sec=>{
-            const its = items.filter(i=>i.section===sec);
-            if(!its.length) return null;
-            return (
-              <div key={sec}>
-                <div style={{background:store.color,padding:'5px 14px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                  <span style={{fontSize:12,fontWeight:700,color:'#fff',textTransform:'uppercase',letterSpacing:0.6}}>{sec}</span>
-                  <span style={{fontSize:11,color:'rgba(255,255,255,0.75)'}}>{its.filter(i=>!i.bought).length}</span>
-                </div>
-                {its.map(item=>{
-                  const eff = effectivePrice(item);
-                  return (
-                    <SwipeRow key={item.id} bought={item.bought} onDelete={()=>deleteItem(item.id)} onToggleBought={()=>toggleBought(item.id)}>
-                      <div onClick={()=>toggleBought(item.id)} style={{
-                        background:item.bought?'#f9f9f9':'#fff',padding:'10px 14px',borderBottom:'0.5px solid #f2f2f7',
-                        display:'flex',alignItems:'center',gap:10,cursor:'pointer'
-                      }}>
-                        <div style={{width:22,height:22,borderRadius:'50%',border:`2px solid ${item.bought?'#34C759':'#c7c7cc'}`,
-                          background:item.bought?'#34C759':'transparent',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                          {item.bought&&<span style={{color:'#fff',fontSize:13,fontWeight:700}}>✓</span>}
-                        </div>
-                        <div style={{flex:1,minWidth:0}}>
-                          <span style={{fontSize:15,fontWeight:500,color:item.bought?'#aeaeb2':'#000',textDecoration:item.bought?'line-through':'none'}}>{item.name}</span>
-                          {item.qty>1&&<span style={{fontSize:12,color:'#8e8e93',marginLeft:4}}>×{item.qty}</span>}
-                          {item.size&&<span style={{fontSize:11,color:'#8e8e93',marginLeft:4}}>{item.size}</span>}
-                        </div>
-                        {eff&&<span style={{fontSize:13,color:item.discount?'#1a7a3a':'#000',fontWeight:500}}>${(eff*item.qty).toFixed(2)}</span>}
-                      </div>
-                    </SwipeRow>
-                  );
-                })}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
-
-  if (view==='edit-meta') {
-    const isNew = !editingMeta;
-    return (
-      <div style={{padding:'8px 16px 24px'}}>
-        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
-          <button onClick={()=>setView('list')} style={{background:'none',border:'none',color:B,fontSize:15,cursor:'pointer',padding:0}}>‹ Back</button>
-          <span style={{fontSize:17,fontWeight:600}}>{isNew?'New Trip':'Edit Trip'}</span>
-        </div>
-        <div style={{fontSize:12,color:'#8e8e93',marginBottom:4,fontWeight:500,textTransform:'uppercase',letterSpacing:0.4}}>Trip Name</div>
-        <input value={metaLabel} onChange={e=>setMetaLabel(e.target.value)}
-          placeholder={`e.g. ${store.name} — Big Stock-up`} autoComplete="off" autoCorrect="off"
-          style={{width:'100%',border:'1px solid #e5e5ea',borderRadius:10,padding:'9px 12px',fontSize:15,marginBottom:12,background:'#f2f2f7',outline:'none',boxSizing:'border-box'}} />
-        <div style={{fontSize:12,color:'#8e8e93',marginBottom:4,fontWeight:500,textTransform:'uppercase',letterSpacing:0.4}}>Date</div>
-        <input type="date" value={metaDate} onChange={e=>setMetaDate(e.target.value)}
-          style={{width:'100%',border:'1px solid #e5e5ea',borderRadius:10,padding:'9px 12px',fontSize:15,marginBottom:16,background:'#f2f2f7',outline:'none',boxSizing:'border-box'}} />
-        {isNew && <p style={{fontSize:13,color:'#8e8e93',margin:'0 0 16px'}}>Your current active items will be copied into this trip as a starting point.</p>}
-        <div style={{display:'flex',gap:8}}>
-          <button onClick={()=>setView('list')} style={{flex:1,background:'#f2f2f7',border:'none',borderRadius:10,padding:12,fontSize:15,cursor:'pointer',color:'#3c3c43'}}>Cancel</button>
-          <button onClick={isNew?createTrip:updateTripMeta} style={{flex:2,background:B,color:'#fff',border:'none',borderRadius:10,padding:12,fontSize:15,fontWeight:600,cursor:'pointer'}}>
-            {isNew?'Create Trip':'Save'}
-          </button>
-        </div>
-        {!isNew && (
-          <button onClick={()=>deleteTrip(editingMeta.id)} style={{width:'100%',marginTop:10,background:'none',color:'#FF3B30',border:'1px solid #FF3B30',borderRadius:10,padding:12,fontSize:15,cursor:'pointer'}}>
-            Delete Trip
-          </button>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div style={{padding:'8px 16px 16px'}}>
-      <p style={{fontSize:13,color:'#8e8e93',margin:'0 0 12px'}}>Each trip is an independent list. Creating a trip copies your current active items as a starting point.</p>
-      {trips.length===0&&<p style={{textAlign:'center',color:'#8e8e93',fontSize:14,padding:'20px 0'}}>No trips yet. Create one below!</p>}
-      <div style={{background:'#fff',borderRadius:12,overflow:'hidden',marginBottom:12}}>
-        {trips.map((t,i)=>{
-          const rem = (t.items||[]).filter(i=>!i.bought).length;
-          const est = totalCost(t.items||[]);
-          return (
-            <div key={t.id} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderBottom:i<trips.length-1?'0.5px solid #e5e5ea':'none'}}>
-              <div style={{flex:1,cursor:'pointer'}} onClick={()=>{setActiveTripId(t.id);setView('shopping');}}>
-                <div style={{fontSize:15,fontWeight:600,color:'#000'}}>{t.label}</div>
-                <div style={{fontSize:12,color:'#8e8e93',marginTop:2}}>{t.date} · {rem} item{rem!==1?'s':''} · Est. ${est.toFixed(2)}</div>
-              </div>
-              <button onClick={()=>{setEditingMeta(t);setMetaLabel(t.label);setMetaDate(t.date);setView('edit-meta');}}
-                style={{background:'#f2f2f7',border:'none',borderRadius:8,padding:'5px 10px',fontSize:13,cursor:'pointer',color:'#3c3c43',fontWeight:500}}>Edit</button>
-              <span onClick={()=>{setActiveTripId(t.id);setView('shopping');}} style={{color:'#c7c7cc',fontSize:18,cursor:'pointer'}}>›</span>
-            </div>
-          );
-        })}
-      </div>
-      <button onClick={()=>{setMetaLabel('');setMetaDate(new Date().toISOString().slice(0,10));setEditingMeta(null);setView('edit-meta');}}
-        style={{width:'100%',background:'none',border:'1.5px dashed #c7c7cc',borderRadius:12,padding:12,color:B,fontSize:15,cursor:'pointer',fontWeight:500}}>
-        + Create New Trip
-      </button>
-    </div>
-  );
-}
-
-// ─── Store Picker ─────────────────────────────────────────────────────────────
-function StorePicker({ stores, onClose, onCreateTrip }) {
-  const [step, setStep]             = useState('pick');
-  const [chosenStore, setChosenStore] = useState(null);
-  const [tripDate,    setTripDate]    = useState(new Date().toISOString().slice(0,10));
-  const [tripLabel,   setTripLabel]   = useState('');
-
-  if (step==='date' && chosenStore) {
-    const store = stores.find(s=>s.id===chosenStore);
-    return (
-      <div style={{padding:'8px 16px 24px'}}>
-        <div style={{display:'flex',alignItems:'center',gap:10,padding:'12px 0 16px'}}>
-          <div style={{width:40,height:40,borderRadius:10,background:store.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20}}>{store.icon}</div>
-          <span style={{fontSize:17,fontWeight:600,color:'#000'}}>{store.name}</span>
-        </div>
-        <div style={{fontSize:12,color:'#8e8e93',marginBottom:6,fontWeight:500,textTransform:'uppercase',letterSpacing:0.4}}>Trip Name</div>
-        <input value={tripLabel} onChange={e=>setTripLabel(e.target.value)}
-          placeholder={`${store.name} — ${tripDate.slice(5).replace('-','/')}`} autoComplete="off" autoCorrect="off"
-          style={{width:'100%',border:'1px solid #e5e5ea',borderRadius:10,padding:'9px 12px',fontSize:15,marginBottom:12,background:'#f2f2f7',outline:'none',boxSizing:'border-box'}} />
-        <div style={{fontSize:12,color:'#8e8e93',marginBottom:6,fontWeight:500,textTransform:'uppercase',letterSpacing:0.4}}>Trip Date</div>
-        <input type="date" value={tripDate} onChange={e=>setTripDate(e.target.value)}
-          style={{width:'100%',border:'1px solid #e5e5ea',borderRadius:10,padding:'10px 12px',fontSize:16,background:'#f2f2f7',outline:'none',marginBottom:16,boxSizing:'border-box'}} />
-        <div style={{display:'flex',gap:8}}>
-          <button onClick={()=>setStep('pick')} style={{flex:1,background:'#f2f2f7',border:'none',borderRadius:10,padding:12,fontSize:15,cursor:'pointer',color:'#3c3c43'}}>Back</button>
-          <button onClick={()=>{onCreateTrip(chosenStore,tripDate,tripLabel.trim());onClose();}}
-            style={{flex:2,background:B,color:'#fff',border:'none',borderRadius:10,padding:12,fontSize:15,fontWeight:600,cursor:'pointer'}}>Create Trip</button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{padding:'8px 0 16px'}}>
-      <div style={{background:'#fff',overflow:'hidden'}}>
-        {stores.map((store,i)=>(
-          <div key={store.id}
-            style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',borderBottom:i<stores.length-1?'0.5px solid #e5e5ea':'none',cursor:'pointer'}}
-            onPointerDown={e=>{e.currentTarget.style.background='#f2f2f7';}}
-            onPointerUp={e=>{e.currentTarget.style.background='#fff';setChosenStore(store.id);setStep('date');}}
-            onPointerLeave={e=>{e.currentTarget.style.background='#fff';}}>
-            <div style={{width:40,height:40,borderRadius:10,background:store.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,flexShrink:0}}>{store.icon}</div>
-            <div style={{flex:1}}>
-              <div style={{fontSize:16,fontWeight:500,color:'#000'}}>{store.name}</div>
-              <div style={{fontSize:12,color:'#8e8e93'}}>{store.items.filter(i=>!i.bought).length} items</div>
-            </div>
-            <span style={{color:'#c7c7cc',fontSize:18}}>›</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 // ─── Store List Screen ────────────────────────────────────────────────────────
-function StoreListScreen({ stores, onSelectStore, onAddStore, onEditStore, onCreateTrip }) {
-  const [editingStore, setEditingStore]   = useState(null);
-  const [showTripPicker, setShowTripPicker] = useState(false);
+// Stores displayed as draggable tiles (2-column grid)
+function StoreListScreen({ stores, onSelectStore, onAddStore, onEditStore }) {
+  const [editingStore, setEditingStore] = useState(null);
+  const [dragIdx,      setDragIdx]      = useState(null);
+  const [overIdx,      setOverIdx]      = useState(null);
+  const [storeOrder,   setStoreOrder]   = useState(() => stores.map(s => s.id));
+
+  // Keep storeOrder in sync if stores change externally
+  useEffect(() => {
+    setStoreOrder(prev => {
+      const existingIds = stores.map(s => s.id);
+      const filtered = prev.filter(id => existingIds.includes(id));
+      const newIds = existingIds.filter(id => !prev.includes(id));
+      return [...filtered, ...newIds];
+    });
+  }, [stores]);
+
+  const orderedStores = storeOrder.map(id => stores.find(s => s.id === id)).filter(Boolean);
 
   const STORE_COLORS = ['#007AFF','#FF9500','#FF3B30','#34C759','#AF52DE','#FF2D55','#5AC8FA','#FF6B35'];
   const STORE_ICONS  = ['🛒','🏪','🏬','🍎','🥩','🥖','🏠','🔧'];
 
+  function handleDragStart(e, i) {
+    setDragIdx(i);
+    e.dataTransfer.effectAllowed = 'move';
+  }
+  function handleDragOver(e, i) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setOverIdx(i);
+  }
+  function handleDrop(i) {
+    if (dragIdx === null || dragIdx === i) { setOverIdx(null); return; }
+    const arr = [...storeOrder];
+    const [moved] = arr.splice(dragIdx, 1);
+    arr.splice(i, 0, moved);
+    setStoreOrder(arr);
+    setDragIdx(null);
+    setOverIdx(null);
+  }
+  function handleDragEnd() { setDragIdx(null); setOverIdx(null); }
+
   function StoreForm({ store, onSave, onDelete }) {
-    const blank = {id:uid(),name:'',color:STORE_COLORS[0],icon:'🛒',sections:[...DEFAULT_SECTIONS],items:[],trips:[],memory:{}};
+    const blank = {id:uid(),name:'',color:STORE_COLORS[0],icon:'🛒',sections:[...DEFAULT_SECTIONS],items:[],memory:{}};
     const [f,setF] = useState(store?{...store}:blank);
     return (
       <div style={{padding:'8px 16px 24px'}}>
@@ -1331,74 +1108,88 @@ function StoreListScreen({ stores, onSelectStore, onAddStore, onEditStore, onCre
         paddingBottom:10, paddingLeft:16, paddingRight:16
       }}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',paddingTop:6}}>
-          <span style={{fontSize:28,fontWeight:700,color:'#000',letterSpacing:-0.5}}>Lists</span>
-          <button onClick={()=>setEditingStore('new')} style={{background:'none',border:'none',color:B,fontSize:28,cursor:'pointer',lineHeight:1,padding:'0 4px'}}>+</button>
+          <span style={{fontSize:28,fontWeight:700,color:'#000',letterSpacing:-0.5}}>My Lists</span>
+          <button onClick={()=>setEditingStore('new')} style={{background:B,color:'#fff',border:'none',borderRadius:10,width:36,height:36,cursor:'pointer',fontSize:22,display:'flex',alignItems:'center',justifyContent:'center'}}>+</button>
         </div>
+        <p style={{fontSize:12,color:'#8e8e93',margin:'4px 0 0'}}>Tap to open · Drag to reorder</p>
       </div>
 
-      <div className="ios-scroll" style={{flex:1,overflowY:'auto',padding:'12px 16px',paddingBottom:'calc(env(safe-area-inset-bottom,0px) + 80px)'}}>
-        <div style={{background:'#fff',borderRadius:12,overflow:'hidden'}}>
-          {stores.map((store,i)=>{
+      <div className="ios-scroll" style={{flex:1,overflowY:'auto',padding:'16px',paddingBottom:'calc(env(safe-area-inset-bottom,0px) + 16px)'}}>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+          {orderedStores.map((store, i) => {
             const remaining = store.items.filter(it=>!it.bought).length;
+            const isDragging = dragIdx === i;
+            const isOver = overIdx === i && dragIdx !== null && dragIdx !== i;
             return (
-              <div key={store.id}
-                style={{display:'flex',alignItems:'center',gap:14,padding:'12px 14px',
-                  borderBottom:i<stores.length-1?'0.5px solid #e5e5ea':'none',cursor:'pointer',background:'#fff'}}
-                onClick={()=>onSelectStore(store.id)}
-                onTouchStart={e=>e.currentTarget.style.background='#f2f2f7'}
-                onTouchEnd={e=>e.currentTarget.style.background='#fff'}>
-                <div style={{width:44,height:44,borderRadius:10,background:store.color,display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0}}>
-                  {store.icon}
-                </div>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:16,fontWeight:600,color:'#000'}}>{store.name}</div>
-                  <div style={{fontSize:13,color:'#8e8e93'}}>
-                    {remaining>0?`${remaining} item${remaining!==1?'s':''} remaining`:'All done ✓'}
-                    {store.trips?.length>0&&` · ${store.trips.length} trip${store.trips.length!==1?'s':''}`}
+              <div
+                key={store.id}
+                draggable
+                onDragStart={e => handleDragStart(e, i)}
+                onDragOver={e => handleDragOver(e, i)}
+                onDrop={() => handleDrop(i)}
+                onDragEnd={handleDragEnd}
+                style={{
+                  background:'#fff',
+                  borderRadius:16,
+                  overflow:'hidden',
+                  boxShadow: isOver
+                    ? `0 0 0 3px ${B}, 0 4px 16px rgba(0,0,0,0.12)`
+                    : '0 2px 8px rgba(0,0,0,0.08)',
+                  opacity: isDragging ? 0.5 : 1,
+                  transform: isDragging ? 'scale(0.97)' : 'scale(1)',
+                  transition:'transform 0.15s, opacity 0.15s, box-shadow 0.15s',
+                  cursor:'grab',
+                  userSelect:'none',
+                }}>
+                {/* Color bar */}
+                <div style={{height:6,background:store.color}} />
+                {/* Tile body */}
+                <div
+                  onClick={() => onSelectStore(store.id)}
+                  style={{padding:'14px 12px 10px',cursor:'pointer'}}>
+                  <div style={{fontSize:32,marginBottom:6,lineHeight:1}}>{store.icon}</div>
+                  <div style={{fontSize:15,fontWeight:700,color:'#000',marginBottom:2,lineHeight:1.2}}>{store.name}</div>
+                  <div style={{fontSize:12,color:'#8e8e93'}}>
+                    {remaining>0?`${remaining} item${remaining!==1?'s':''}`:'All done ✓'}
                   </div>
                 </div>
-                <span style={{color:'#c7c7cc',fontSize:18,fontWeight:300}}>›</span>
-                <button onClick={e=>{e.stopPropagation();setEditingStore(store.id);}}
-                  style={{background:'none',border:'none',color:'#c7c7cc',fontSize:18,cursor:'pointer',padding:'4px 0 4px 4px'}}>
-                  ···
-                </button>
+                {/* Edit button */}
+                <div style={{borderTop:'0.5px solid #f2f2f7',padding:'6px 12px',display:'flex',justifyContent:'flex-end'}}>
+                  <button
+                    onClick={e=>{e.stopPropagation();setEditingStore(store.id);}}
+                    style={{background:'none',border:'none',color:'#8e8e93',fontSize:12,cursor:'pointer',padding:'2px 4px',fontWeight:500}}>
+                    Edit ···
+                  </button>
+                </div>
               </div>
             );
           })}
+          {/* Add new store tile */}
+          <div
+            onClick={() => setEditingStore('new')}
+            style={{
+              background:'#fff',borderRadius:16,
+              border:'2px dashed #c7c7cc',
+              display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
+              minHeight:130,cursor:'pointer',gap:6,color:'#8e8e93',
+            }}>
+            <span style={{fontSize:32}}>+</span>
+            <span style={{fontSize:13,fontWeight:500}}>Add Store</span>
+          </div>
         </div>
       </div>
-
-      <div style={{
-        background:'rgba(255,255,255,0.92)',backdropFilter:'blur(20px)',WebkitBackdropFilter:'blur(20px)',
-        borderTop:'0.5px solid rgba(60,60,67,0.2)',
-        display:'flex',zIndex:100,flexShrink:0,
-        paddingBottom:'env(safe-area-inset-bottom,8px)',paddingTop:8
-      }}>
-        {[
-          {icon:'🛒',label:'Lists',  action:()=>{}},
-          {icon:'📅',label:'New Trip',action:()=>setShowTripPicker(true)},
-          {icon:'⚙️',label:'Settings',action:()=>{}},
-        ].map(({icon,label,action},i)=>(
-          <div key={label} onClick={action} style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:2,opacity:i===0?1:0.5,cursor:'pointer'}}>
-            <span style={{fontSize:22}}>{icon}</span>
-            <span style={{fontSize:10,fontWeight:500,color:i===0?B:'#8e8e93'}}>{label}</span>
-          </div>
-        ))}
-      </div>
-
-      <Sheet open={showTripPicker} onClose={()=>setShowTripPicker(false)} title="New Shopping Trip">
-        <StorePicker stores={stores} onClose={()=>setShowTripPicker(false)} onCreateTrip={onCreateTrip} />
-      </Sheet>
     </div>
   );
 }
 
 // ─── Shopping List Screen ─────────────────────────────────────────────────────
-const LIST_VIEWS   = ['Active','All','Done'];
+// Bottom tabs: Active | All | Done (replaces the dropdown)
+// Top right: Sections button (was bottom)
+// Bottom right tab area: Export
 const CHIP_FILTERS = [{k:'all',l:'All'},{k:'weekly',l:'Weekly'},{k:'sale',l:'On Sale'},{k:'watchlist',l:'Watch List'}];
 
 function ShoppingListScreen({ store, onBack, onUpdateStore }) {
-  const [listView,  setListView]  = useState('Active');
+  const [listView,  setListView]  = useState('Active'); // 'Active' | 'All' | 'Done'
   const [filter,    setFilter]    = useState('all');
   const [sheet,     setSheet]     = useState(null);
   const [editingItem, setEditingItem] = useState(null);
@@ -1414,19 +1205,11 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
   const tapCounts = useRef({});
   const tapTimers = useRef({});
 
-  // Fix 7: strip expired sales on mount and when store changes
+  // Strip expired sales on store load
   useEffect(() => {
     const cleaned = stripExpiredSales(store.items);
     const changed = cleaned.some((item,i) => item.discount !== store.items[i].discount);
     if (changed) onUpdateStore({...store, items: cleaned});
-  }, [store.id]); // run once per store load
-
-  // Fix 9: auto re-populate weekly items on app open
-  useEffect(() => {
-    const repopulated = rePopulateWeeklyItems(store);
-    if (repopulated.items.length !== store.items.length) {
-      onUpdateStore(repopulated);
-    }
   }, [store.id]);
 
   const items    = store.items;
@@ -1474,16 +1257,24 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
 
   const visibleItems = (() => {
     let base = items;
-    if(listView==='Active')  base=base.filter(i=>!i.bought);
-    if(listView==='Done')    base=base.filter(i=>i.bought);
-    if(filter==='weekly')    base=base.filter(i=>i.weekly);
-    if(filter==='sale')      base=base.filter(i=>i.discount>0);
-    if(filter==='watchlist') base=base.filter(i=>i.watch);
+    if (listView==='Active') base = base.filter(i=>!i.bought);
+    if (listView==='Done')   base = base.filter(i=>i.bought);
+    // For Done view: deduplicate by name — show each item name only once
+    if (listView==='Done') {
+      const seen = new Set();
+      base = base.filter(i => {
+        if (seen.has(i.name)) return false;
+        seen.add(i.name);
+        return true;
+      });
+    }
+    if (filter==='weekly')    base = base.filter(i=>i.weekly);
+    if (filter==='sale')      base = base.filter(i=>i.discount>0);
+    if (filter==='watchlist') base = base.filter(i=>i.watch);
     return base;
   })();
 
   const remaining = items.filter(i=>!i.bought).length;
-  // Fix 3: est total excludes Not Urgent
   const estTotal  = totalCost(items);
 
   const notUrgent = sections.includes('Not Urgent') ? 'Not Urgent' : (sections[sections.length-1]||sections[0]||'');
@@ -1525,11 +1316,6 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
 
   function handleOpenEditFromQuick(partialItem) { setEditingItem(partialItem); setSheet('edit'); }
 
-  function reAddWeekly(item) {
-    const fresh = {...item,id:nextId.current++,bought:false};
-    updateStore({items:[...items,fresh]});
-  }
-
   function handleBarcodeForQuickAdd(result) {
     setShowBarcodeScanner(false);
     if(result.name) {
@@ -1547,12 +1333,16 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
     }
   }
 
-  // Fix 4: barcode scanner as full-screen overlay, not a page swap
   return (
-    <div style={{background:'#f2f2f7',height:'100%',display:'flex',flexDirection:'column',overflow:'hidden',width:'100%',maxWidth:'100%',position:'relative'}}>
+    <div style={{
+      background:'#f2f2f7',height:'100%',display:'flex',flexDirection:'column',
+      overflow:'hidden',width:'100%',position:'relative',
+      // Ensure nothing overflows the viewport
+      maxWidth:'100vw',
+    }}>
       <style>{GLOBAL_CSS}</style>
 
-      {/* Fix 4: Camera overlay rendered on top when active */}
+      {/* Camera overlay */}
       {showBarcodeScanner && (
         <div style={{position:'absolute',inset:0,zIndex:500,background:'#000',display:'flex',flexDirection:'column'}}>
           <div style={{
@@ -1573,11 +1363,11 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
       <div style={{
         background:'rgba(255,255,255,0.96)',backdropFilter:'blur(20px)',WebkitBackdropFilter:'blur(20px)',
         borderBottom:'0.5px solid rgba(60,60,67,0.18)',flexShrink:0,
-        width:'100%',maxWidth:'100%',
+        width:'100%',
         paddingTop:'calc(env(safe-area-inset-top, 0px) + 4px)'
       }}>
-        {/* Title row */}
-        <div style={{display:'flex',alignItems:'center',padding:'6px 12px 4px',width:'100%',boxSizing:'border-box'}}>
+        {/* Title row — Sections button moved here (top right), no Export here */}
+        <div style={{display:'flex',alignItems:'center',padding:'6px 12px 4px',boxSizing:'border-box'}}>
           <button onClick={onBack} style={{background:'none',border:'none',color:B,fontSize:15,cursor:'pointer',padding:'4px 8px 4px 0',display:'flex',alignItems:'center',gap:2,flexShrink:0}}>
             <span style={{fontSize:18,lineHeight:1}}>‹</span> Lists
           </button>
@@ -1587,21 +1377,14 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
             </div>
             <div style={{fontSize:11,color:'#8e8e93'}}>{remaining} of {items.length} remaining</div>
           </div>
-          <button onClick={()=>setSheet('export')} style={{background:'none',border:'none',color:B,fontSize:14,fontWeight:500,cursor:'pointer',padding:'4px 0 4px 8px',flexShrink:0}}>Export</button>
+          {/* Sections — now top right */}
+          <button onClick={()=>setSheet('sections')} style={{background:'none',border:'none',color:B,fontSize:14,fontWeight:500,cursor:'pointer',padding:'4px 0 4px 8px',flexShrink:0}}>
+            Sections
+          </button>
         </div>
 
-        {/* Fix 5: Filter chips row — Est. cost removed from here, moved into QuickAdd */}
-        <div style={{display:'flex',alignItems:'center',padding:'2px 10px 6px',gap:6,width:'100%',boxSizing:'border-box',overflowX:'auto'}}>
-          <select value={listView} onChange={e=>setListView(e.target.value)}
-            style={{
-              border:'none',background:'none',color:B,fontSize:14,fontWeight:700,cursor:'pointer',outline:'none',
-              padding:'2px 18px 2px 0',WebkitAppearance:'none',appearance:'none',flexShrink:0,
-              backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23007AFF'/%3E%3C/svg%3E")`,
-              backgroundRepeat:'no-repeat',backgroundPosition:'right 2px center',
-            }}>
-            {LIST_VIEWS.map(v=><option key={v} value={v}>{v}</option>)}
-          </select>
-          <span style={{color:'#e5e5ea',fontSize:16,flexShrink:0}}>|</span>
+        {/* Filter chips row */}
+        <div style={{display:'flex',alignItems:'center',padding:'2px 10px 6px',gap:6,boxSizing:'border-box',overflowX:'auto',width:'100%'}}>
           <div style={{display:'flex',gap:5,flex:1,overflowX:'auto'}}>
             {CHIP_FILTERS.map(cf=>(
               <button key={cf.k} onClick={()=>setFilter(cf.k)} style={{
@@ -1615,7 +1398,7 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
           </div>
         </div>
 
-        {/* Fix 5: QuickAdd row now contains Est. cost */}
+        {/* QuickAdd row */}
         <QuickAdd
           sections={sections}
           memory={store.memory}
@@ -1628,11 +1411,11 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
         />
       </div>
 
-      {/* Fix 1: List scroll area — strict width containment */}
+      {/* List scroll area */}
       <div className="ios-scroll" style={{
         flex:1,overflowY:'auto',overflowX:'hidden',
         paddingBottom:'calc(env(safe-area-inset-bottom,0px) + 60px)',
-        width:'100%',maxWidth:'100%',boxSizing:'border-box'
+        width:'100%',boxSizing:'border-box',
       }}>
         {visibleItems.length===0&&(
           <div style={{textAlign:'center',padding:'40px 24px',color:'#8e8e93',fontSize:15}}>
@@ -1648,7 +1431,7 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
           const its = visibleItems.filter(i=>i.section===sec);
           if(!its.length) return null;
           return (
-            <div key={sec} style={{width:'100%',maxWidth:'100%',overflow:'hidden'}}>
+            <div key={sec} style={{width:'100%',overflow:'hidden'}}>
               <div style={{background:store.color,padding:'5px 14px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
                 <span style={{fontSize:12,fontWeight:700,color:'#fff',textTransform:'uppercase',letterSpacing:0.6}}>{sec}</span>
                 <span style={{fontSize:11,color:'rgba(255,255,255,0.75)',fontWeight:500}}>{its.length}</span>
@@ -1672,13 +1455,14 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
                         background:isDrag?'#e5f0ff':isOver?'#f0f8ff':'#fff',
                         borderBottom:idx<its.length-1?'0.5px solid #f2f2f7':'none',
                         borderTop:isOver?`2px solid ${B}`:'2px solid transparent',
-                        padding:'9px 12px 9px 14px',
-                        display:'flex',alignItems:'center',gap:10,
+                        padding:'9px 10px 9px 14px',
+                        display:'flex',alignItems:'center',gap:8,
                         opacity:isDrag?0.6:1,
                         transform:isDrag?'scale(1.01)':'scale(1)',
                         transition:'transform 0.1s, opacity 0.1s',
                         touchAction:'pan-y',userSelect:'none',cursor:'pointer',
-                        width:'100%',maxWidth:'100%',boxSizing:'border-box',minWidth:0,
+                        width:'100%',boxSizing:'border-box',minWidth:0,
+                        overflow:'hidden',
                       }}>
                       <div style={{flex:1,minWidth:0,overflow:'hidden'}}>
                         <div style={{
@@ -1699,14 +1483,8 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
                           </div>
                         )}
                       </div>
-                      {item.bought&&item.weekly&&listView==='Done'&&(
-                        <button onClick={e=>{e.stopPropagation();reAddWeekly(item);}}
-                          style={{background:'#f3e5f5',color:'#7b1fa2',border:'none',borderRadius:8,padding:'4px 8px',fontSize:11,fontWeight:600,cursor:'pointer',flexShrink:0,whiteSpace:'nowrap'}}>
-                          + Re-add
-                        </button>
-                      )}
                       {item.price!=null&&(
-                        <div style={{textAlign:'right',flexShrink:0,fontSize:13,fontWeight:500}}>
+                        <div style={{textAlign:'right',flexShrink:0,fontSize:13,fontWeight:500,minWidth:0}}>
                           {item.discount>0&&<div style={{fontSize:10,color:'#aeaeb2',textDecoration:'line-through'}}>${(item.price*item.qty).toFixed(2)}</div>}
                           <span style={{color:item.discount?'#1a7a3a':(item.bought?'#aeaeb2':'#000')}}>${lineTotal.toFixed(2)}</span>
                         </div>
@@ -1722,22 +1500,39 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
         })}
       </div>
 
-      {/* Bottom tabs */}
+      {/* Bottom tabs — Active | All | Done | Export */}
       <div style={{
         background:'rgba(255,255,255,0.92)',backdropFilter:'blur(20px)',WebkitBackdropFilter:'blur(20px)',
         borderTop:'0.5px solid rgba(60,60,67,0.2)',
         display:'flex',flexShrink:0,
-        paddingBottom:'env(safe-area-inset-bottom,8px)',paddingTop:8,zIndex:10
+        paddingBottom:'env(safe-area-inset-bottom,8px)',paddingTop:6,zIndex:10,
       }}>
-        {[['☰','List',null],['📅','Trips','trips'],['⚙️','Sections','sections']].map(([icon,label,v])=>(
-          <button key={label} onClick={()=>setSheet(v)} style={{
+        {/* Active / All / Done as tap targets */}
+        {['Active','All','Done'].map(v=>(
+          <button key={v} onClick={()=>setListView(v)} style={{
             flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:1,
             background:'none',border:'none',cursor:'pointer',
-            color:sheet===v?B:'#8e8e93',fontSize:10,fontWeight:sheet===v?600:400,padding:'2px 0'
+            color:listView===v?B:'#8e8e93',fontSize:10,fontWeight:listView===v?700:400,padding:'4px 0',
+            borderTop:listView===v?`2px solid ${B}`:'2px solid transparent',
           }}>
-            <span style={{fontSize:20}}>{icon}</span>{label}
+            <span style={{fontSize:18}}>
+              {v==='Active'?'☐':v==='All'?'☰':'☑'}
+            </span>
+            {v}
           </button>
         ))}
+        {/* Divider */}
+        <div style={{width:'0.5px',background:'#e5e5ea',margin:'4px 0'}}/>
+        {/* Export — now bottom right */}
+        <button onClick={()=>setSheet('export')} style={{
+          flex:1,display:'flex',flexDirection:'column',alignItems:'center',gap:1,
+          background:'none',border:'none',cursor:'pointer',
+          color:sheet==='export'?B:'#8e8e93',fontSize:10,fontWeight:400,padding:'4px 0',
+          borderTop:'2px solid transparent',
+        }}>
+          <span style={{fontSize:18}}>📤</span>
+          Export
+        </button>
       </div>
 
       {/* Sheets */}
@@ -1763,10 +1558,6 @@ function ShoppingListScreen({ store, onBack, onUpdateStore }) {
           }}
           onAdd={sec=>{if(!sec||sections.includes(sec))return;updateStore({sections:[...sections,sec]});}}
         />
-      </Sheet>
-
-      <Sheet open={sheet==='trips'} onClose={()=>setSheet(null)} title="Shopping Trips" height="96vh">
-        <TripsScreen store={store} onUpdateStore={onUpdateStore} />
       </Sheet>
 
       <Sheet open={sheet==='export'} onClose={()=>setSheet(null)} title="Export List">
@@ -1804,7 +1595,14 @@ export default function App() {
           await setDoc(ref, { stores: INITIAL_STORES });
         }
         unsubRef.current = onSnapshot(ref, docSnap => {
-          if (docSnap.exists()) setStores(docSnap.data().stores || []);
+          if (docSnap.exists()) {
+            // Strip trips from data coming in (migration: remove old trips field)
+            const rawStores = (docSnap.data().stores || []).map(s => {
+              const { trips, ...rest } = s;
+              return rest;
+            });
+            setStores(rawStores);
+          }
         });
         setFbReady(true);
       } catch (err) {
@@ -1840,15 +1638,6 @@ export default function App() {
 
   function addStore(store) { setStores(prev=>[...prev,store]); }
 
-  function createTrip(storeId, date, label) {
-    setStores(prev=>prev.map(s=>{
-      if(s.id!==storeId) return s;
-      const tripLabel = label || `${s.name} — ${date.slice(5).replace('-','/')}`;
-      const cloned    = s.items.filter(i=>!i.bought).map(i=>({...i,bought:false}));
-      return {...s, trips:[...(s.trips||[]), {id:uid(),label:tripLabel,date,items:cloned}]};
-    }));
-  }
-
   if(activeStore) {
     return (
       <ShoppingListScreen
@@ -1865,7 +1654,6 @@ export default function App() {
       onSelectStore={id=>setActiveStoreId(id)}
       onAddStore={addStore}
       onEditStore={updateStore}
-      onCreateTrip={createTrip}
     />
   );
 }
