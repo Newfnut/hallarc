@@ -33,13 +33,15 @@ const fbConfig = {
 ## File structure
 
 ```
-index.html      — entire app (HTML + CSS + JS, single file, ~1200 lines)
-sw.js           — service worker for offline caching
+index.html      — shell only: <head> meta tags, empty #app div, links to styles.css and app.js (~18 lines)
+styles.css      — all CSS (~310 lines); CSS variables throughout, no JS
+app.js          — all application logic as an ES module (~1700 lines); Firebase ESM imports at top
+sw.js           — service worker for offline caching (precaches index.html, styles.css, app.js)
 manifest.json   — PWA manifest (name, icons, theme)
 CLAUDE.md       — this file
 ```
 
-All three files sit in the same flat directory. No build step, no bundler.
+All files sit in the same flat directory. No build step, no bundler.
 
 ---
 
@@ -244,4 +246,4 @@ Light/dark toggle button in every screen header. Preference saved to `localStora
 - **CSS variables for everything.** Never hardcode a color in JS or HTML.
 - **iOS-native feel.** Font stack: `-apple-system, BlinkMacSystemFont, 'SF Pro Display'`. Border radius, shadow, and spacing follow iOS conventions.
 - **Render pattern:** `renderX()` returns HTML string → assigned to `innerHTML` → `bindX()` attaches listeners. Never manipulate individual DOM nodes directly.
-- **When returning code changes:** return only the changed function(s) or block(s), not the entire file. Reference the function name clearly.
+- **When returning code changes:** return only the changed function(s) or block(s), not the entire file. Reference both the function name and the filename (e.g. `app.js → renderHome()`, `styles.css → .item-row`).

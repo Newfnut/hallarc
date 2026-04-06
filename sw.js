@@ -1,5 +1,5 @@
 const CACHE = 'shopper-v1';
-const PRECACHE = ['/', '/index.html'];
+const PRECACHE = ['/', '/index.html', '/styles.css', '/app.js'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(PRECACHE)));
