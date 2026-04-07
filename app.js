@@ -190,7 +190,7 @@ function renderHome() {
       <div class="hdr-title">Shopper</div>
       <button class="ico-btn" id="h-history" title="Trip history" style="font-size:18px;position:relative">
         🕘
-        ${(()=>{const c=S.trips.filter(t=>t.status==='complete').length;return c>0?`<span style="position:absolute;top:4px;right:4px;width:8px;height:8px;background:var(--accent);border-radius:50%;border:1.5px solid var(--header)"></span>`:''})()}
+        \${(()=>{const c=S.trips.filter(t=>t.status==='complete').length;return c>0?`<span style="position:absolute;top:4px;right:4px;width:8px;height:8px;background:var(--accent);border-radius:50%;border:1.5px solid var(--header)"></span>`:''})()}
       </button>
       <button class="ico-btn" id="h-theme">\${S.theme==='dark'?'☀️':'🌙'}</button>
       <button class="ico-btn" id="h-user">👤</button>
@@ -1668,7 +1668,12 @@ if (DEV) {
 onAuthStateChanged(auth, async user=>{
   if(user) {
     S.user=user;
-    const ud=await getDoc(doc(db,'users',user.uid));
+    let ud = await getDoc(doc(db,'users',user.uid));
+    if(!ud.exists()) {
+      // Race condition: signup may still be writing the user doc — wait and retry once
+      await new Promise(r => setTimeout(r, 1500));
+      ud = await getDoc(doc(db,'users',user.uid));
+    }
     if(ud.exists()) { await loadHousehold(ud.data().householdId); go('home'); }
     else { await signOut(auth); go('auth'); }
   } else go('auth');
