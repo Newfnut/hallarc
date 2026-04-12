@@ -12,6 +12,7 @@
   --r:12px;--r-sm:8px;--r-lg:16px;
   --safe-t:env(safe-area-inset-top,0px);--safe-b:env(safe-area-inset-bottom,0px);
   --font:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sans-serif;
+  --store-color:var(--text-secondary);--store-bg:var(--bg-secondary);
 }
 [data-theme="dark"]{
   --bg:#000000;--bg-card:#1c1c1e;--bg-secondary:#2c2c2e;--bg-input:#3a3a3c;
@@ -22,6 +23,7 @@
   --warning:#fbbf24;--warning-bg:#451a03;
   --header:#1c1c1e;--sep:rgba(255,255,255,.16);
   --shadow:0 1px 3px rgba(0,0,0,.4);--shadow-lg:0 8px 32px rgba(0,0,0,.6);
+  --store-color:var(--text-secondary);--store-bg:var(--bg-secondary);
 }
 html{font-family:var(--font);background:var(--bg);color:var(--text);height:100%;-webkit-text-size-adjust:100%}
 body{height:100%;overflow:hidden;-webkit-font-smoothing:antialiased}
@@ -93,22 +95,30 @@ input,select{font-family:var(--font);-webkit-appearance:none;appearance:none}
 /* ─── Trip: category sections ─── */
 .cat-sec{margin-bottom:2px}
 .cat-hdr{display:flex;align-items:center;padding:10px 16px 6px;gap:8px;cursor:pointer;-webkit-tap-highlight-color:transparent}
-.cat-label{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--text-secondary);flex:1}
-.cat-badge{font-size:11px;background:var(--bg-secondary);color:var(--text-secondary);padding:2px 7px;border-radius:9px}
-.cat-chev{color:var(--text-muted);font-size:13px;transition:transform .2s}
+/* Store-colour theming for category headers — overridden by specific classes below */
+.cat-label{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--store-color,var(--text-secondary));flex:1}
+.cat-badge{font-size:11px;background:var(--store-bg,var(--bg-secondary));color:var(--store-color,var(--text-secondary));padding:2px 7px;border-radius:9px}
+.cat-chev{color:var(--store-color,var(--text-muted));font-size:13px;transition:transform .2s}
 .cat-chev.open{transform:rotate(90deg)}
-.cat-uncategorized .cat-label{color:var(--warning)}
-.cat-uncategorized .cat-badge{background:var(--warning-bg);color:var(--warning)}
-.cat-watchlist .cat-label{color:var(--text-muted)}
+/* Overrides for special categories */
+.cat-uncategorized .cat-label{color:var(--warning)!important}
+.cat-uncategorized .cat-badge{background:var(--warning-bg)!important;color:var(--warning)!important}
+.cat-watchlist .cat-label{color:var(--text-muted)!important;opacity:.7}
+.cat-watchlist .cat-badge{background:var(--bg-secondary)!important;color:var(--text-muted)!important;opacity:.7}
+.cat-watchlist .cat-chev{color:var(--text-muted)!important;opacity:.7}
 .cat-items-wrap{background:var(--bg-card);border-radius:var(--r);margin:0 12px 4px;overflow:hidden;box-shadow:var(--shadow)}
 
 /* ─── Item rows ─── */
 .item-wrap{position:relative;overflow:hidden}
-.item-reveal{position:absolute;inset:0;display:flex;align-items:stretch;pointer-events:none}
+.item-reveal{position:absolute;inset:0;display:flex;align-items:stretch;pointer-events:none;z-index:0}
 .item-reveal-left{background:var(--accent);color:white;display:flex;align-items:center;padding-left:18px;gap:6px;font-size:13px;font-weight:500;flex:0 0 50%}
 .item-reveal-right{background:var(--danger);color:white;display:flex;align-items:center;justify-content:flex-end;padding-right:18px;gap:6px;font-size:13px;font-weight:500;flex:0 0 50%;margin-left:auto}
 .item-row{display:flex;align-items:center;gap:10px;padding:11px 13px;background:var(--bg-card);border-bottom:.5px solid var(--border);position:relative;z-index:1;will-change:transform;min-height:54px;-webkit-tap-highlight-color:transparent}
 .item-row:last-child{border-bottom:none}
+/* ─── FIX: dim watchlist items without making background transparent (which exposed reveal layer) ─── */
+.item-row.item-dim .item-circle,
+.item-row.item-dim .item-body,
+.item-row.item-dim .item-right{opacity:.5}
 .item-circle{width:24px;height:24px;border-radius:50%;border:2px solid var(--border-mid);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s}
 .item-row.checked .item-circle{background:var(--accent);border-color:var(--accent)}
 .item-row.checked .item-circle::after{content:'';width:6px;height:10px;border:2.5px solid white;border-top:none;border-left:none;transform:rotate(45deg) translate(-1px,-1px)}
@@ -155,15 +165,18 @@ input,select{font-family:var(--font);-webkit-appearance:none;appearance:none}
 .frow{display:flex;gap:10px}
 .frow .fg{flex:1}
 
-/* ─── Category pills in editor ─── */
+/* ─── Category pills in editor (legacy, kept for potential reuse) ─── */
 .cat-pills{display:flex;gap:7px;flex-wrap:wrap;padding:0 16px;margin:10px 0 0}
 .cpill{padding:6px 12px;border-radius:18px;font-size:13px;font-weight:500;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:all .12s}
 .cpill.sel{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
 
-/* ─── Price type toggle ─── */
+/* ─── Price / weight type toggle ─── */
 .pt-toggle{display:flex;background:var(--bg-input);border-radius:var(--r-sm);padding:3px;gap:2px}
 .pt-btn{flex:1;padding:7px 4px;background:none;border-radius:6px;font-size:12px;font-weight:500;color:var(--text-secondary);transition:all .12s;font-family:var(--font)}
 .pt-btn.sel{background:var(--bg-card);color:var(--text);box-shadow:var(--shadow)}
+/* Weight-type toggle reuses pt-btn styles */
+.wt-btn{flex:1;padding:7px 4px;background:none;border-radius:6px;font-size:12px;font-weight:500;color:var(--text-secondary);transition:all .12s;font-family:var(--font)}
+.wt-btn.sel{background:var(--bg-card);color:var(--text);box-shadow:var(--shadow)}
 
 /* ─── Toggle switch ─── */
 .tog-row{display:flex;align-items:center;padding:13px 16px;border-bottom:.5px solid var(--border)}
@@ -187,6 +200,12 @@ input,select{font-family:var(--font);-webkit-appearance:none;appearance:none}
 .type-opt.sel{border-color:var(--accent);background:var(--accent-bg)}
 .type-opt-ic{font-size:24px;display:block;margin-bottom:5px}
 .type-opt-lbl{font-size:12px;font-weight:500}
+
+/* ─── Store colour swatches ─── */
+.color-swatches{display:flex;flex-wrap:wrap;gap:8px;padding:0 16px;margin:8px 0 4px}
+.color-swatch{width:38px;height:38px;border-radius:10px;border:2.5px solid transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:transform .12s,border-color .12s;flex-shrink:0;-webkit-tap-highlight-color:transparent}
+.color-swatch.sel{transform:scale(1.12)}
+.color-swatch:active{transform:scale(.95)}
 
 /* ─── Auth ─── */
 #auth-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px;gap:0}
@@ -292,11 +311,11 @@ input,select{font-family:var(--font);-webkit-appearance:none;appearance:none}
 .scan-result-cat{font-size:12px;color:var(--text-secondary);margin-top:2px}
 
 /* ─── Template / category editor ─── */
-.te-row{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:.5px solid var(--border);background:var(--bg-card);position:relative;touch-action:none}
+.te-row{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:.5px solid var(--border);background:var(--bg-card);position:relative;touch-action:pan-y}
 .te-row:last-child{border-bottom:none}
 .te-row.te-dragging{opacity:.3}
 .te-row.te-drag-over{border-top:2px solid var(--accent)}
-.te-handle{font-size:18px;color:var(--text-muted);cursor:grab;padding:0 4px;flex-shrink:0;user-select:none}
+.te-handle{font-size:18px;color:var(--text-muted);cursor:grab;padding:0 4px;flex-shrink:0;user-select:none;touch-action:none}
 .te-handle:active{cursor:grabbing}
 .te-name{flex:1;font-size:15px;font-weight:500;padding:4px 6px;border-radius:6px;background:transparent;border:1.5px solid transparent;color:var(--text);outline:none;font-family:var(--font);min-width:0}
 .te-name:focus{background:var(--bg-input);border-color:var(--accent)}
@@ -308,3 +327,6 @@ input,select{font-family:var(--font);-webkit-appearance:none;appearance:none}
 .te-add-inp:focus{box-shadow:0 0 0 2px var(--accent)}
 .te-add-btn{background:var(--accent);color:var(--accent-fg);border-radius:8px;padding:9px 15px;font-size:14px;font-weight:600;flex-shrink:0}
 .te-warn{font-size:12px;color:var(--warning);padding:6px 16px 2px;display:none}
+
+/* ─── Weight equiv hint ─── */
+.w-equiv{font-size:12px;color:var(--text-secondary);margin-top:5px;padding-left:2px;min-height:18px}
