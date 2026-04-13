@@ -1463,7 +1463,6 @@ async function doSaveItem(){
 
   const eachPrice=parseFloat(q('e-price')?.value)||0;
 
-  const eachPrice=parseFloat(q('e-price')?.value)||0;
   const wPrice=parseFloat(q('e-wprice')?.value)||0;
 
   let finalPrice=0, finalPriceType='each';
