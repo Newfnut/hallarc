@@ -430,7 +430,7 @@ function renderTrip() {
       <button class="ico-btn" id="t-back" style="font-size:22px">‹</button>
       <div style="flex:1;min-width:0">
         <div class="hdr-title">${trip.storeName}</div>
-        <div class="hdr-sub">${fmtDate(trip.tripDate)}${trip.label?' · '+trip.label:''}</div>
+        <div class="hdr-sub" id="t-date-lbl" style="cursor:pointer">${fmtDate(trip.tripDate)}${trip.label?' · '+trip.label:''} <span style="font-size:10px;opacity:.45">✏️</span></div>
       </div>
       <button class="ico-btn" id="t-theme">${S.theme==='dark'?'☀️':'🌙'}</button>
       <button class="ico-btn" id="t-regulars" title="Regular items" style="font-size:16px">⭐</button>
@@ -545,7 +545,19 @@ function renderTrip() {
       <div style="height:8px"></div>
     </div>
   </div>
-
+<!-- Edit trip date sheet -->
+  <div class="overlay" id="edit-date-sheet">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">Edit trip date</div>
+      <div class="fg"><label class="fg-label">Shopping date</label>
+        <input class="finput" id="ed-date" type="date" value="${trip.tripDate}"></div>
+      <div class="fg"><label class="fg-label">Label (optional)</label>
+        <input class="finput" id="ed-label" type="text" placeholder="e.g. Weekly shop" value="${esc(trip.label||'')}"></div>
+      <button class="btn-main" id="ed-save">Save</button>
+      <div style="height:8px"></div>
+    </div>
+  </div>
   <!-- Barcode scanner sheet -->
   <div class="overlay" id="scanner-sheet">
     <div class="sheet">
@@ -623,7 +635,7 @@ function rowHTML(item, dim=false) {
       <div class="item-circle"></div>
       <div class="item-body">
         <div class="item-nm">${item.name}</div>
-        <div class="item-detail">${item.category||''}${item.notes?' · '+item.notes:''}</div>
+        <div class="item-detail">${item.category||''}${item.packSize?' · '+item.packSize:''}${item.notes?' · '+item.notes:''}</div>
         ${unitDual?`<div class="unit-both">${unitDual}</div>`:''}
         ${hasSale?`<div class="sale-tag${saleExpiringSoon?' expiring':''}">SALE −$${item.saleDiscount.toFixed(2)}${saleExpiryStr?` <span style="font-weight:400;opacity:.8">${saleExpiryStr}</span>`:''}</div>`:''}
         ${item.isRegular?`<div class="reg-tag">⭐ Regular</div>`:''}
@@ -662,13 +674,16 @@ function renderEditor() {
     </select>
   </div>
 
-  <div class="fg"><label class="fg-label">Price per item</label>
-    <input class="finput" id="e-price" type="number" value="${eachPriceVal}" min="0" step="0.01" placeholder="0.00 — leave blank if sold by weight"></div>
-
   <div class="frow">
-    <div class="fg"><label class="fg-label">Quantity</label>
-      <input class="finput" id="e-qty" type="number" value="${item.qty||1}" min="0.01" step="0.01" style="text-align:center"></div>
-    <div class="fg"><label class="fg-label">Unit</label>
+    <div class="fg"><label class="fg-label">Price per item</label>
+      <input class="finput" id="e-price" type="number" value="${eachPriceVal}" min="0" step="0.01" placeholder="0.00"></div>
+    <div class="fg" style="max-width:110px"><label class="fg-label">Quantity</label>
+      <input class="finput" id="e-qty" type="number" value="${item.qty||1}" min="0.01" step="0.01" onfocus="this.select()" style="text-align:center"></div>
+  </div>
+  <div class="frow">
+    <div class="fg"><label class="fg-label">Pack size <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;color:var(--text-muted)">(not produce weight)</span></label>
+      <input class="finput" id="e-packsize" type="text" value="${esc(item.packSize||'')}" placeholder="e.g. 500 ml, 1.5 kg, 12 ct" autocorrect="off"></div>
+    <div class="fg" style="max-width:110px"><label class="fg-label">Unit</label>
       <select class="finput" id="e-unit">
         ${['ea','pkg','box','can','bottle','bunch','bag','L','ml','oz'].map(u=>`<option${item.unit===u?' selected':''}>${u}</option>`).join('')}
       </select>
@@ -774,6 +789,8 @@ function renderHistory() {
           <div style="font-size:17px;font-weight:600" id="hd-title">Trip detail</div>
           <div style="font-size:12px;color:var(--text-secondary);margin-top:2px" id="hd-sub"></div>
         </div>
+        <button class="ico-btn" id="hd-csv" title="Download CSV" style="font-size:17px">⬇️</button>
+        <button class="ico-btn" id="hd-delete" title="Delete trip" style="color:var(--danger);font-size:16px">🗑</button>
         <button class="ico-btn" id="hd-close" style="font-size:14px;color:var(--text-secondary)">✕</button>
       </div>
       <div id="hd-body"><div style="text-align:center;padding:36px;color:var(--text-secondary)"><div class="spin" style="margin:0 auto"></div></div></div>
@@ -952,6 +969,8 @@ function bindHistory() {
   on('hist-back','click',()=>{haptic('light');go('home');});
   on('hist-theme','click',()=>{setTheme(S.theme==='dark'?'light':'dark');render();});
   on('hd-close','click',closeSheets);
+  on('hd-csv','click',doDownloadCSV);
+  on('hd-delete','click',doDeleteHistTrip);
   bindOverlayClose();
   qAll('.hist-card').forEach(el=>el.addEventListener('click',()=>{haptic('light');openHistDetail(el.dataset.hid);}));
 }
@@ -966,7 +985,7 @@ async function goHistory() {
     ];
   } else {
     try {
-      const snap=await getDocs(fsQ(col('trips'),where('status','==','complete'),orderBy('completedAt','desc')));
+      const snap=await getDocs(fsQ(col('trips'),where('status','==','complete')));
       S.histTrips=snap.docs.map(d=>({id:d.id,...d.data()}));
     } catch(e){ S.histTrips=[]; }
   }
@@ -995,6 +1014,7 @@ async function openHistDetail(tripId) {
       items=snap.docs.map(d=>({id:d.id,...d.data()}));
     } catch(e){}
   }
+  S.histDetailItems = items;
   if(!body) return;
   const cats={};
   items.forEach(i=>{const c=i.category||'Uncategorized';if(!cats[c])cats[c]=[];cats[c].push(i);});
@@ -1025,7 +1045,57 @@ async function openHistDetail(tripId) {
         </div>
       </div>`).join('')}`;
 }
+function doDownloadCSV(){
+  const trip = S.histDetailTrip;
+  const items = S.histDetailItems || [];
+  if(!trip) return;
+  haptic('light');
+  const rows = [['Name','Category','Qty','Unit','Price Type','Unit Price','Sale Discount','Effective Price','Checked']];
+  items.forEach(i => {
+    rows.push([
+      i.name,
+      i.category || '',
+      i.qty || 1,
+      i.unit || 'ea',
+      i.priceType || 'each',
+      (i.price || 0).toFixed(2),
+      (i.saleDiscount || 0).toFixed(2),
+      effPrice(i).toFixed(2),
+      i.checked ? 'Yes' : 'No'
+    ]);
+  });
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const safeName = `${trip.storeName} ${trip.tripDate}${trip.label?' '+trip.label:''}`.replace(/[/\\?%*:|"<>]/g,'-');
+  a.download = safeName + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
+async function doDeleteHistTrip(){
+  const trip = S.histDetailTrip;
+  if(!trip) return;
+  if(!confirm(`Permanently delete the ${trip.storeName} trip from ${fmtDate(trip.tripDate)}?\n\nThis cannot be undone.`)) return;
+  haptic('heavy');
+  if(DEV){
+    S.histTrips = S.histTrips.filter(t => t.id !== trip.id);
+    S.histDetailTrip = null; S.histDetailItems = [];
+    closeSheets(); render(); return;
+  }
+  try {
+    const itemsSnap = await getDocs(collection(db,`households/${S.householdId}/trips/${trip.id}/items`));
+    const batch = writeBatch(db);
+    itemsSnap.docs.forEach(d => batch.delete(d.ref));
+    batch.delete(doc(db,`households/${S.householdId}/trips/${trip.id}`));
+    await batch.commit();
+  } catch(e){ console.error('Delete trip failed', e); return; }
+  S.histTrips = S.histTrips.filter(t => t.id !== trip.id);
+  S.histDetailTrip = null; S.histDetailItems = [];
+  closeSheets(); render();
+}
 // ─── Store / category template editor ─────────
 let _teStoreId=null, _teCats=[], _teDragIdx=null;
 
@@ -1138,6 +1208,8 @@ function bindTrip(){
   on('t-scan','click',openScanner);
   on('scan-close','click',closeScanner);
   on('t-addBtn','click',doQuickAdd);
+  on('t-date-lbl','click',()=>openSheet('edit-date-sheet'));
+  on('ed-save','click',doEditTripDate);
   on('t-xoff-toggle','click',()=>{ const l=q('t-xoff-list'); if(l) l.style.display=l.style.display==='none'?'block':'none'; });
   const inp=q('t-add');
   if(inp){
@@ -1218,7 +1290,15 @@ async function fetchOFF(query){
       .map(p=>({name:p.product_name,category:guessCategory(p.product_name,S.store?.categories||[]),source:'off'}));
   } catch(e){ return []; }
 }
-
+async function doEditTripDate(){
+  const date=q('ed-date')?.value; if(!date) return;
+  const label=q('ed-label')?.value.trim()||'';
+  haptic('medium');
+  if(!DEV) await updateDoc(doc(db,`households/${S.householdId}/trips/${S.trip.id}`),{tripDate:date,label});
+  S.trip.tripDate=date; S.trip.label=label;
+  closeSheets();
+  renderTripContent();
+}
 async function doCompleteTrip(){
   if(!confirm('Mark this trip as complete and archive it?')) return;
   haptic('medium');
@@ -1376,8 +1456,9 @@ async function doSaveItem(){
   const name=q('e-name')?.value.trim(); if(!name) return;
   const qty=parseFloat(q('e-qty')?.value)||1;
   const unit=q('e-unit')?.value||'ea';
-  const notes=q('e-notes')?.value.trim()||'';
-  const cat=q('e-cat')?.value||null;
+  <div class="fg"><label class="fg-label">Price per item</label>
+    <input class="finput" id="e-price" type="number" value="${eachPriceVal}" min="0" step="0.01" placeholder="0.00 — leave blank if sold by weight"></div>
+
   const eachPrice=parseFloat(q('e-price')?.value)||0;
   const wPrice=parseFloat(q('e-wprice')?.value)||0;
 
@@ -1387,7 +1468,7 @@ async function doSaveItem(){
 
   const disc=_sale?(parseFloat(q('e-disc')?.value)||0):0;
   const exp=_sale?(q('e-exp')?.value||null):null;
-  const data={name,category:cat,qty,unit,priceType:finalPriceType,price:finalPrice,saleDiscount:disc,saleExpiry:exp,notes,isWatchlist:_wl,isRegular:_reg,checked:false};
+  const data={name,category:cat,qty,unit,packSize,priceType:finalPriceType,price:finalPrice,saleDiscount:disc,saleExpiry:exp,notes,isWatchlist:_wl,isRegular:_reg,checked:false};
   haptic('medium');
 
   if(S.editorMode==='add'){
@@ -1671,5 +1752,5 @@ function closeSheets(){
 function bindOverlayClose(){ qAll('.overlay').forEach(el=>el.addEventListener('click',e=>{ if(e.target===el) closeSheets(); })); }
 
 if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
-
+try { screen.orientation?.lock?.('portrait').catch(()=>{}); } catch(_){}
 render();
