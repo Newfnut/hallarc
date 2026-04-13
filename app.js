@@ -1456,8 +1456,12 @@ async function doSaveItem(){
   const name=q('e-name')?.value.trim(); if(!name) return;
   const qty=parseFloat(q('e-qty')?.value)||1;
   const unit=q('e-unit')?.value||'ea';
-  <div class="fg"><label class="fg-label">Price per item</label>
-    <input class="finput" id="e-price" type="number" value="${eachPriceVal}" min="0" step="0.01" placeholder="0.00 — leave blank if sold by weight"></div>
+  async function doSaveItem(){
+  const name=q('e-name')?.value.trim(); if(!name) return;
+  const qty=parseFloat(q('e-qty')?.value)||1;
+  const unit=q('e-unit')?.value||'ea';
+
+  const eachPrice=parseFloat(q('e-price')?.value)||0;
 
   const eachPrice=parseFloat(q('e-price')?.value)||0;
   const wPrice=parseFloat(q('e-wprice')?.value)||0;
