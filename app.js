@@ -1456,14 +1456,11 @@ async function doSaveItem(){
   const name=q('e-name')?.value.trim(); if(!name) return;
   const qty=parseFloat(q('e-qty')?.value)||1;
   const unit=q('e-unit')?.value||'ea';
-  async function doSaveItem(){
-  const name=q('e-name')?.value.trim(); if(!name) return;
-  const qty=parseFloat(q('e-qty')?.value)||1;
-  const unit=q('e-unit')?.value||'ea';
+  const cat=q('e-cat')?.value||'';
+  const packSize=q('e-packsize')?.value.trim()||'';
+  const notes=q('e-notes')?.value.trim()||'';
 
   const eachPrice=parseFloat(q('e-price')?.value)||0;
-
-  const wPrice=parseFloat(q('e-wprice')?.value)||0;
 
   let finalPrice=0, finalPriceType='each';
   if(wPrice>0){ finalPrice=wPrice; finalPriceType=_wt; }
