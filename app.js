@@ -171,6 +171,7 @@ const S = {
   histTrips: [],
   histDetailTrip: null,
   histDetailItems: [],
+  watchlistItems: [],
 };
 
 // ═══════════════════════════════════════════
@@ -413,13 +414,14 @@ function renderTrip() {
   const items = S.items;
   const uncat    = items.filter(i=>!i.checked&&(!i.category||!store.categories.includes(i.category))&&!i.isWatchlist);
   const checked  = items.filter(i=>i.checked);
-  const watchlist= items.filter(i=>!i.checked&&i.isWatchlist&&i.category!=='Watchlist');
   const catMap   = {};
   cats.forEach(c=>{
     const ci=items.filter(i=>!i.checked&&i.category===c&&!i.isWatchlist);
     if(ci.length) catMap[c]=ci;
   });
-  const wlCatItems = items.filter(i=>!i.checked&&i.category==='Watchlist');
+  // Legacy: trip items still flagged isWatchlist (pre-migration) stay visible
+  const legacyWlItems = items.filter(i=>!i.checked&&i.isWatchlist);
+  const wlItems = [...S.watchlistItems, ...legacyWlItems];
 
   const activeTotal  = items.filter(i=>!i.checked&&!i.isWatchlist&&i.category!=='Watchlist').reduce((s,i)=>s+effPrice(i)*(i.qty||1),0);
   const checkedTotal = checked.reduce((s,i)=>s+effPrice(i)*(i.qty||1),0);
@@ -469,15 +471,16 @@ function renderTrip() {
         </div>
       `).join('')}
 
-      ${wlCatItems.length||watchlist.length?`
+      ${wlItems.length?`
         <div class="cat-sec">
           <div class="cat-hdr cat-watchlist" data-cat="__watch__">
             <span class="cat-label">👁 Watchlist</span>
-            <span class="cat-badge">${wlCatItems.length+watchlist.length}</span>
+            <span class="cat-badge">${wlItems.length}</span>
             <span class="cat-chev open">›</span>
           </div>
           <div class="cat-items-wrap" id="ci-__watch__">
-            ${[...wlCatItems,...watchlist].map(i=>rowHTML(i,true)).join('')}
+            ${S.watchlistItems.map(i=>rowHTML(i,true,true)).join('')}
+            ${legacyWlItems.map(i=>rowHTML(i,true,false)).join('')}
           </div>
         </div>
       `:''}
@@ -528,6 +531,16 @@ function renderTrip() {
       <div class="sheet-handle"></div>
       <div class="sheet-title" id="ctx-title">Move to category</div>
       <div id="ctx-cats"></div>
+    </div>
+  </div>
+
+  <!-- Move to another list sheet -->
+  <div class="overlay" id="move-list-sheet">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title" id="move-list-title">Move to list</div>
+      <div id="move-list-options"></div>
+      <div style="height:8px"></div>
     </div>
   </div>
 
@@ -582,7 +595,7 @@ function renderTrip() {
 }
 
 // ─── Item row HTML ────────────────────────────
-function rowHTML(item, dim=false) {
+function rowHTML(item, dim=false, isStoreWl=false) {
   const isWeight = item.priceType==='per_lb' || item.priceType==='per_kg';
   const unitLabel = item.priceType==='per_lb' ? 'lb' : 'kg';
   const effUnit   = effPrice(item);
@@ -626,10 +639,10 @@ function rowHTML(item, dim=false) {
   }
 
   return `
-  <div class="item-wrap" data-iid="${item.id}" draggable="true">
+  <div class="item-wrap" data-iid="${item.id}" draggable="true"${isStoreWl?' data-swl="true"':''}>
     <div class="item-reveal">
-      <div class="item-reveal-left">✓ Check off</div>
-      <div class="item-reveal-right">Delete ✕</div>
+      <div class="item-reveal-left">${isStoreWl?'＋ Add to trip':'✓ Check off'}</div>
+      <div class="item-reveal-right">${isStoreWl?'Remove ✕':'Delete ✕'}</div>
     </div>
     <div class="item-row${item.checked?' checked':''}${dim?' item-dim':''}" data-iid="${item.id}">
       <div class="item-circle"></div>
@@ -677,11 +690,11 @@ function renderEditor() {
   <div class="frow">
     <div class="fg"><label class="fg-label">Price per item</label>
       <input class="finput" id="e-price" type="number" value="${eachPriceVal}" min="0" step="0.01" placeholder="0.00"></div>
-    <div class="fg" style="max-width:110px"><label class="fg-label">Quantity</label>
+    <div class="fg" style="max-width:110px"><label class="fg-label" id="e-qty-label">Quantity</label>
       <input class="finput" id="e-qty" type="number" value="${item.qty||1}" min="0.01" step="0.01" onfocus="this.select()" style="text-align:center"></div>
   </div>
   <div class="frow">
-    <div class="fg"><label class="fg-label">Pack size <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;color:var(--text-muted)">(not produce weight)</span></label>
+    <div class="fg"><label class="fg-label">Pack size</label>
       <input class="finput" id="e-packsize" type="text" value="${esc(item.packSize||'')}" placeholder="e.g. 500 ml, 1.5 kg, 12 ct" autocorrect="off"></div>
     <div class="fg" style="max-width:110px"><label class="fg-label">Unit</label>
       <select class="finput" id="e-unit">
@@ -1248,7 +1261,7 @@ async function doAC(){
   let res=[];
   if(DEV){
     const seen=new Set();
-    S.items.forEach(i=>{ const k=i.name.toLowerCase(); if(k.includes(lower)&&!seen.has(k)){ seen.add(k); res.push({name:i.name,category:i.category,lastPrice:i.price||0}); } });
+    S.items.forEach(i=>{ const k=i.name.toLowerCase(); if(k.includes(lower)&&!seen.has(k)){ seen.add(k); res.push({name:i.name,category:i.category,lastPrice:i.price||0,lastQty:i.qty||1,lastUnit:i.unit||'ea',lastPackSize:i.packSize||'',lastPriceType:i.priceType||'each',lastStoreId:S.store?.id}); } });
   } else {
     try {
       const snap=await getDocs(fsQ(collection(db,`households/${S.householdId}/itemCache`),where('normalizedName','>=',lower),where('normalizedName','<=',lower+'\uf8ff'),limit(8)));
@@ -1264,7 +1277,7 @@ async function doAC(){
   if(!res.find(r=>r.name.toLowerCase()===lower)){ const gc=guessCategory(val,S.store?.categories||[]); res.push({name:cap(val),category:gc,isNew:true}); }
   if(!res.length){ drop.style.display='none'; return; }
   drop.innerHTML=res.map(r=>`
-    <div class="ac-item" data-n="${esc(r.name)}" data-c="${esc(r.category||'')}">
+    <div class="ac-item" data-n="${esc(r.name)}" data-c="${esc(r.category||'')}" data-p="${r.lastPrice||0}" data-q="${r.lastQty||1}" data-u="${esc(r.lastUnit||'ea')}" data-ps="${esc(r.lastPackSize||'')}" data-pt="${esc(r.lastPriceType||'each')}">
       <div class="ac-ic">${catIcon(r.category)}</div>
       <div style="flex:1">
         <div class="ac-name">${r.name}${r.source==='off'?`<span class="off-badge">OFF</span>`:''}</div>
@@ -1275,7 +1288,15 @@ async function doAC(){
   drop.style.display='block';
   drop.querySelectorAll('.ac-item').forEach(item=>item.addEventListener('click',()=>{
     inp.value=item.dataset.n; drop.style.display='none';
-    openEditor('add',{name:item.dataset.n,category:item.dataset.c||guessCategory(item.dataset.n,S.store?.categories||[])});
+    openEditor('add',{
+      name:item.dataset.n,
+      category:item.dataset.c||guessCategory(item.dataset.n,S.store?.categories||[]),
+      price:parseFloat(item.dataset.p)||0,
+      qty:parseFloat(item.dataset.q)||1,
+      unit:item.dataset.u||'ea',
+      packSize:item.dataset.ps||'',
+      priceType:item.dataset.pt||'each',
+    });
   }));
 }
 
@@ -1327,7 +1348,7 @@ async function openRegularsSheet(){
   }
   list.innerHTML=`<div style="background:var(--bg-card);border-radius:var(--r);margin:10px 12px 4px;overflow:hidden;box-shadow:var(--shadow)">`+
     regulars.map(r=>`
-      <div class="reg-item" data-rid="${esc(r.id)}" data-rname="${esc(r.name)}" data-rcat="${esc(r.category||'')}">
+      <div class="reg-item" data-rid="${esc(r.id)}" data-rname="${esc(r.name)}" data-rcat="${esc(r.category||'')}" data-rp="${r.lastPrice||0}" data-rq="${r.lastQty||1}" data-ru="${esc(r.lastUnit||'ea')}" data-rps="${esc(r.lastPackSize||'')}" data-rpt="${esc(r.lastPriceType||'each')}">
         <div class="reg-check" id="rc-${r.id}"></div>
         <div style="flex:1;min-width:0">
           <div style="font-size:15px;font-weight:500">${r.name}</div>
@@ -1352,10 +1373,10 @@ async function doAddRegulars(){
   if(!S.regularsSelected?.size) return;
   haptic('medium');
   const toAdd=[];
-  q('reg-list').querySelectorAll('.reg-item').forEach(el=>{ if(S.regularsSelected.has(el.dataset.rid)) toAdd.push({name:el.dataset.rname,category:el.dataset.rcat}); });
+  q('reg-list').querySelectorAll('.reg-item').forEach(el=>{ if(S.regularsSelected.has(el.dataset.rid)) toAdd.push({name:el.dataset.rname,category:el.dataset.rcat,price:parseFloat(el.dataset.rp)||0,qty:parseFloat(el.dataset.rq)||1,unit:el.dataset.ru||'ea',packSize:el.dataset.rps||'',priceType:el.dataset.rpt||'each'}); });
   for(const item of toAdd){
     const cat=item.category||guessCategory(item.name,S.store?.categories||[]);
-    const data={name:item.name,category:cat,qty:1,unit:'ea',priceType:'each',price:0,saleDiscount:0,saleExpiry:null,notes:'',isWatchlist:false,isRegular:true,checked:false,sortOrder:Date.now()+Math.random()*1000};
+    const data={name:item.name,category:cat,qty:item.qty||1,unit:item.unit||'ea',priceType:item.priceType||'each',price:item.price||0,packSize:item.packSize||'',saleDiscount:0,saleExpiry:null,notes:'',isWatchlist:false,isRegular:true,checked:false,sortOrder:Date.now()+Math.random()*1000};
     if(DEV){ S.items.push({id:'dev-'+Date.now(),...data}); }
     else await addDoc(itemsCol(),{...data,createdAt:serverTimestamp()});
   }
@@ -1442,14 +1463,28 @@ function bindEditor(){
   qAll('.wt-btn').forEach(b=>b.addEventListener('click',()=>{ qAll('.wt-btn').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); _wt=b.dataset.pt; haptic('light'); updateWeightEquiv(); }));
   const wPriceInp=q('e-wprice');
   if(wPriceInp){ wPriceInp.addEventListener('input',updateWeightEquiv); updateWeightEquiv(); }
+
+  document.querySelectorAll('#editor-inner .finput').forEach(inp=>{
+    inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); doSaveItem(); } });
+  });
 }
 
 function updateWeightEquiv(){
   const el=q('e-w-equiv'); if(!el) return;
   const val=parseFloat(q('e-wprice')?.value)||0;
-  if(val<=0){ el.textContent=''; return; }
-  if(_wt==='per_lb') el.textContent=`$${val.toFixed(2)}/lb = $${(val/0.453592).toFixed(2)}/kg`;
-  else               el.textContent=`$${val.toFixed(2)}/kg = $${(val*0.453592).toFixed(2)}/lb`;
+  const lbl=q('e-qty-label');
+  if(val<=0){
+    el.textContent='';
+    if(lbl) lbl.textContent='Quantity';
+    return;
+  }
+  if(_wt==='per_lb'){
+    el.textContent=`$${val.toFixed(2)}/lb = $${(val/0.453592).toFixed(2)}/kg`;
+    if(lbl) lbl.textContent='Weight (lb)';
+  } else {
+    el.textContent=`$${val.toFixed(2)}/kg = $${(val*0.453592).toFixed(2)}/lb`;
+    if(lbl) lbl.textContent='Weight (kg)';
+  }
 }
 
 async function doSaveItem(){
@@ -1461,33 +1496,81 @@ async function doSaveItem(){
   const notes=q('e-notes')?.value.trim()||'';
 
   const eachPrice=parseFloat(q('e-price')?.value)||0;
-
+  const wPrice=parseFloat(q('e-wprice')?.value)||0;
   let finalPrice=0, finalPriceType='each';
   if(wPrice>0){ finalPrice=wPrice; finalPriceType=_wt; }
   else { finalPrice=eachPrice; finalPriceType='each'; }
 
   const disc=_sale?(parseFloat(q('e-disc')?.value)||0):0;
   const exp=_sale?(q('e-exp')?.value||null):null;
-  const data={name,category:cat,qty,unit,packSize,priceType:finalPriceType,price:finalPrice,saleDiscount:disc,saleExpiry:exp,notes,isWatchlist:_wl,isRegular:_reg,checked:false};
+  const baseData={name,category:cat,qty,unit,packSize,priceType:finalPriceType,price:finalPrice,saleDiscount:disc,saleExpiry:exp,notes,isRegular:_reg};
   haptic('medium');
 
-  if(S.editorMode==='add'){
-    data.sortOrder=Date.now();
-    if(DEV){ S.items.push({id:'dev-'+Date.now(),...data}); closeSheets(); return; }
-    await addDoc(itemsCol(),{...data,createdAt:serverTimestamp()});
-    updCache(name,cat,finalPrice,_reg);
+  const isStoreWl=S.editorItem?.isStoreWl||false;
+  const wlCol=()=>collection(db,`households/${S.householdId}/stores/${S.store.id}/watchlist`);
+  const wlRef=(id)=>doc(db,`households/${S.householdId}/stores/${S.store.id}/watchlist/${id}`);
+
+  if(_wl){
+    // ── Save to store watchlist ──
+    const wlData={...baseData,isWatchlist:true,checked:false};
+    if(S.editorMode==='add'){
+      if(DEV){ S.watchlistItems.push({id:'dev-wl-'+Date.now(),...wlData,isStoreWl:true}); closeSheets(); return; }
+      await addDoc(wlCol(),{...wlData,createdAt:serverTimestamp()});
+    } else if(isStoreWl){
+      // Editing an existing watchlist item — update in place
+      if(DEV){ const idx=S.watchlistItems.findIndex(i=>i.id===S.editorItem.id); if(idx>=0) S.watchlistItems[idx]={...S.watchlistItems[idx],...wlData,isStoreWl:true}; closeSheets(); return; }
+      await updateDoc(wlRef(S.editorItem.id),wlData);
+    } else {
+      // Moving a trip item to watchlist
+      if(DEV){
+        S.items=S.items.filter(i=>i.id!==S.editorItem.id);
+        S.watchlistItems.push({id:'dev-wl-'+Date.now(),...wlData,isStoreWl:true});
+        closeSheets(); return;
+      }
+      await addDoc(wlCol(),{...wlData,createdAt:serverTimestamp()});
+      await deleteDoc(doc(db,`households/${S.householdId}/trips/${S.trip.id}/items/${S.editorItem.id}`));
+      recalcTotals();
+    }
+  } else if(isStoreWl){
+    // ── Promoting watchlist item to this trip (stays on watchlist) ──
+    const tripData={...baseData,isWatchlist:false,checked:false,sortOrder:Date.now()};
+    const wlUpdate={...baseData,isWatchlist:true}; // keep watchlist copy current
+    if(DEV){
+      const idx=S.watchlistItems.findIndex(i=>i.id===S.editorItem.id);
+      if(idx>=0) S.watchlistItems[idx]={...S.watchlistItems[idx],...wlUpdate,isStoreWl:true};
+      S.items.push({id:'dev-'+Date.now(),...tripData}); closeSheets(); return;
+    }
+    await updateDoc(wlRef(S.editorItem.id),wlUpdate);
+    await addDoc(itemsCol(),{...tripData,createdAt:serverTimestamp()});
+    recalcTotals();
   } else {
-    if(DEV){ const idx=S.items.findIndex(i=>i.id===S.editorItem.id); if(idx>=0) S.items[idx]={...S.items[idx],...data}; closeSheets(); return; }
-    await updateDoc(doc(db,`households/${S.householdId}/trips/${S.trip.id}/items/${S.editorItem.id}`),data);
-    if(_reg) updCache(name,cat,finalPrice,true);
+    // ── Normal trip item save ──
+    const data={...baseData,isWatchlist:false,checked:false};
+    if(S.editorMode==='add'){
+      data.sortOrder=Date.now();
+      if(DEV){ S.items.push({id:'dev-'+Date.now(),...data}); closeSheets(); return; }
+      await addDoc(itemsCol(),{...data,createdAt:serverTimestamp()});
+      updCache(name,cat,finalPrice,_reg,{qty,unit,packSize,priceType:finalPriceType,storeId:S.store?.id});
+    } else {
+      if(DEV){ const idx=S.items.findIndex(i=>i.id===S.editorItem.id); if(idx>=0) S.items[idx]={...S.items[idx],...data}; closeSheets(); return; }
+      await updateDoc(doc(db,`households/${S.householdId}/trips/${S.trip.id}/items/${S.editorItem.id}`),data);
+      if(_reg) updCache(name,cat,finalPrice,true,{qty,unit,packSize,priceType:finalPriceType,storeId:S.store?.id});
+    }
+    recalcTotals();
   }
-  recalcTotals(); closeSheets();
+  closeSheets();
 }
 
 async function doDeleteItem(){
   if(!S.editorItem?.id) return;
-  if(!confirm(`Delete "${S.editorItem.name}"?`)) return;
+  const msg=S.editorItem.isStoreWl?`Remove "${S.editorItem.name}" from watchlist?`:`Delete "${S.editorItem.name}"?`;
+  if(!confirm(msg)) return;
   haptic('heavy');
+  if(S.editorItem.isStoreWl){
+    if(DEV){ S.watchlistItems=S.watchlistItems.filter(i=>i.id!==S.editorItem.id); closeSheets(); return; }
+    await deleteDoc(doc(db,`households/${S.householdId}/stores/${S.store.id}/watchlist/${S.editorItem.id}`));
+    closeSheets(); return;
+  }
   if(DEV){ S.items=S.items.filter(i=>i.id!==S.editorItem.id); closeSheets(); return; }
   await deleteDoc(doc(db,`households/${S.householdId}/trips/${S.trip.id}/items/${S.editorItem.id}`));
   recalcTotals(); closeSheets();
@@ -1498,26 +1581,35 @@ function bindItemInteractions(){
   qAll('.item-row').forEach(row=>{
     const iid=row.dataset.iid; if(!iid) return;
     const wrap=row.closest('.item-wrap');
+    const isStoreWl=wrap?.dataset.swl==='true';
 
-    // Double-tap = check; single tap after delay = edit
+    // Double-tap = check/add; single tap after delay = edit
     let tapTimer=null, tapCount=0;
     row.addEventListener('click',()=>{
       tapCount++;
       if(tapCount===1){
-        tapTimer=setTimeout(()=>{ tapCount=0; const item=S.items.find(i=>i.id===iid); if(item) openEditor('edit',item); },300);
+        tapTimer=setTimeout(()=>{
+          tapCount=0;
+          const item=S.items.find(i=>i.id===iid)||S.watchlistItems.find(i=>i.id===iid);
+          if(item) openEditor('edit',item);
+        },300);
       } else {
         clearTimeout(tapTimer); tapCount=0;
-        row.classList.add('anim-pop'); setTimeout(()=>row.classList.remove('anim-pop'),250);
-        doToggleCheck(iid);
+        if(isStoreWl){
+          doAddWatchlistToTrip(iid);
+        } else {
+          row.classList.add('anim-pop'); setTimeout(()=>row.classList.remove('anim-pop'),250);
+          doToggleCheck(iid);
+        }
       }
     });
-    if(wrap) setupSwipe(wrap,row,iid);
+    if(wrap) setupSwipe(wrap,row,iid,isStoreWl);
     setupLongPress(row,iid);
     if(wrap) setupDragSort(wrap,iid);
   });
 }
 
-function setupSwipe(wrap,row,iid){
+function setupSwipe(wrap,row,iid,isStoreWl=false){
   let sx=0,sy=0,cx=0,going=false;
   const THRESH=65;
   row.addEventListener('touchstart',e=>{ sx=e.touches[0].clientX; sy=e.touches[0].clientY; cx=0; going=true; row.style.transition='none'; },{passive:true});
@@ -1533,10 +1625,40 @@ function setupSwipe(wrap,row,iid){
     if(!going) return; going=false;
     row.style.transition='transform .25s ease';
     if(cx<-THRESH){
-      if(!confirm('Delete this item?')){ row.style.transform=''; return; }
+      const msg=isStoreWl?'Remove from watchlist?':'Delete this item?';
+      if(!confirm(msg)){ row.style.transform=''; return; }
       haptic('heavy'); row.style.transform='translateX(-110%)'; setTimeout(()=>doDeleteItem2(iid),240);
+      async function doAddWatchlistToTrip(iid){
+  const item=S.watchlistItems.find(i=>i.id===iid); if(!item) return;
+  haptic('medium');
+  const cat=item.category||guessCategory(item.name,S.store?.categories||[])||'';
+  const data={name:item.name,category:cat,qty:item.qty||1,unit:item.unit||'ea',priceType:item.priceType||'each',price:item.price||0,saleDiscount:item.saleDiscount||0,saleExpiry:item.saleExpiry||null,notes:item.notes||'',isWatchlist:false,isRegular:item.isRegular||false,checked:false,sortOrder:Date.now()};
+  if(DEV){ S.items.push({id:'dev-'+Date.now(),...data}); renderTripContent(); return; }
+  await addDoc(itemsCol(),{...data,createdAt:serverTimestamp()});
+  recalcTotals();
+}
+
+async function doMoveToWatchlist(iid){
+  const item=S.items.find(i=>i.id===iid); if(!item) return;
+  haptic('medium');
+  const wlData={name:item.name,category:item.category||'',qty:item.qty||1,unit:item.unit||'ea',priceType:item.priceType||'each',price:item.price||0,saleDiscount:item.saleDiscount||0,saleExpiry:item.saleExpiry||null,notes:item.notes||'',isWatchlist:true,isRegular:item.isRegular||false,checked:false};
+  if(DEV){
+    S.items=S.items.filter(i=>i.id!==iid);
+    S.watchlistItems.push({id:'dev-wl-'+Date.now(),...wlData,isStoreWl:true});
+    renderTripContent(); return;
+  }
+  await addDoc(collection(db,`households/${S.householdId}/stores/${S.store.id}/watchlist`),{...wlData,createdAt:serverTimestamp()});
+  await deleteDoc(doc(db,`households/${S.householdId}/trips/${S.trip.id}/items/${iid}`));
+  recalcTotals();
+}
     } else if(cx>THRESH){
-      haptic('medium'); row.style.transform='translateX(110%)'; setTimeout(()=>{ row.style.transform=''; row.style.transition=''; doToggleCheck(iid); },240);
+      haptic('medium');
+      row.style.transform='translateX(110%)';
+      setTimeout(()=>{
+        row.style.transform=''; row.style.transition='';
+        if(isStoreWl) doAddWatchlistToTrip(iid);
+        else doToggleCheck(iid);
+      },240);
     } else {
       row.style.transform='';
     }
@@ -1572,24 +1694,86 @@ async function doReorderItem(fromId,toId){
 }
 
 function openCtxMenu(iid){
-  const item=S.items.find(i=>i.id===iid); if(!item) return;
-  S.contextItem=item;
-  q('ctx-title').textContent=`Move "${item.name}" to…`;
-  q('ctx-cats').innerHTML=(S.store?.categories||[]).map(c=>`
-    <div class="ctx-option" data-cc="${esc(c)}">
+  const wlItem=S.watchlistItems.find(i=>i.id===iid);
+  const item=wlItem||S.items.find(i=>i.id===iid); if(!item) return;
+  S.contextItem={...item,isStoreWl:!!wlItem};
+  q('ctx-title').textContent=`"${item.name}"`;
+
+  if(wlItem){
+    // Watchlist item: just offer "Add to this trip"
+    q('ctx-cats').innerHTML=`
+      <div class="ctx-option" id="ctx-wl-add">
+        <span class="ctx-option-ic">＋</span>
+        <span class="ctx-option-lbl">Add to this trip</span>
+      </div>`;
+    document.getElementById('ctx-wl-add')?.addEventListener('click',()=>{ haptic('light'); closeSheets(); doAddWatchlistToTrip(iid); });
+    openSheet('ctx-sheet'); return;
+  }
+
+  // Trip item: offer Move to Watchlist + Move to another list + categories
+  const otherTrips=S.trips.filter(t=>t.status==='active'&&t.id!==S.trip.id);
+  const moveRow=otherTrips.length?`<div class="ctx-option" id="ctx-move-list"><span class="ctx-option-ic">↗️</span><span class="ctx-option-lbl">Move to another list…</span></div>`:'';
+  const wlRow=`<div class="ctx-option" id="ctx-to-watchlist"><span class="ctx-option-ic">👁</span><span class="ctx-option-lbl">Move to Watchlist</span></div><div style="height:.5px;background:var(--border);margin:0 16px"></div>`;
+  const cats=(S.store?.categories||[]).filter(c=>c!=='Watchlist');
+  q('ctx-cats').innerHTML=moveRow+wlRow+cats.map(c=>`    <div class="ctx-option" data-cc="${esc(c)}">
       <span class="ctx-option-ic">${catIcon(c)}</span>
       <span class="ctx-option-lbl">${c}</span>
       ${item.category===c?'<span style="margin-left:auto;color:var(--accent)">✓</span>':''}
     </div>`).join('');
-  qAll('.ctx-option').forEach(o=>o.addEventListener('click',async()=>{
+  qAll('.ctx-option[data-cc]').forEach(o=>o.addEventListener('click',async()=>{
     haptic('light');
     const cc=o.dataset.cc; if(!cc||!S.contextItem) return;
-    const isWl=cc==='Watchlist';
-    if(!DEV) await updateDoc(doc(db,`households/${S.householdId}/trips/${S.trip.id}/items/${S.contextItem.id}`),{category:cc,isWatchlist:isWl});
-    else { const it=S.items.find(i=>i.id===S.contextItem.id); if(it){it.category=cc;it.isWatchlist=isWl;} }
+    if(!DEV) await updateDoc(doc(db,`households/${S.householdId}/trips/${S.trip.id}/items/${S.contextItem.id}`),{category:cc,isWatchlist:false});
+    else { const it=S.items.find(i=>i.id===S.contextItem.id); if(it){it.category=cc;it.isWatchlist=false;} }
     updCache(S.contextItem.name,cc); closeSheets();
   }));
+  document.getElementById('ctx-move-list')?.addEventListener('click',()=>{ closeSheets(); setTimeout(()=>openMoveToList(iid),50); });
+  document.getElementById('ctx-to-watchlist')?.addEventListener('click',()=>{ closeSheets(); setTimeout(()=>doMoveToWatchlist(iid),50); });
   openSheet('ctx-sheet');
+}
+
+function openMoveToList(iid){
+  const item=S.items.find(i=>i.id===iid); if(!item) return;
+  S.contextItem=item;
+  const otherTrips=S.trips.filter(t=>t.status==='active'&&t.id!==S.trip.id);
+  if(!q('move-list-title')||!q('move-list-options')) return;
+  q('move-list-title').textContent=`Move "${item.name}" to…`;
+  q('move-list-options').innerHTML=otherTrips.length
+    ? otherTrips.map(t=>`
+      <div class="ctx-option" data-tid="${t.id}">
+        <span class="ctx-option-ic">${storeIco(t.storeType)}</span>
+        <div style="flex:1">
+          <div class="ctx-option-lbl">${t.storeName}</div>
+          <div style="font-size:12px;color:var(--text-secondary)">${fmtDate(t.tripDate)}${t.label?' · '+t.label:''}</div>
+        </div>
+      </div>`).join('')
+    : `<div style="padding:24px;text-align:center;color:var(--text-secondary);font-size:14px">No other active lists.</div>`;
+  q('move-list-options').querySelectorAll('.ctx-option').forEach(o=>
+    o.addEventListener('click',()=>doMoveToList(o.dataset.tid))
+  );
+  openSheet('move-list-sheet');
+}
+
+async function doMoveToList(targetTripId){
+  const item=S.contextItem; if(!item||!targetTripId) return;
+  haptic('medium');
+  const newItem={name:item.name,category:null,qty:item.qty||1,unit:item.unit||'ea',priceType:'each',price:0,saleDiscount:0,saleExpiry:null,notes:'',isWatchlist:false,isRegular:item.isRegular||false,checked:false,sortOrder:Date.now()};
+  if(DEV){
+    S.items=S.items.filter(i=>i.id!==item.id);
+    closeSheets(); renderTripContent(); return;
+  }
+  try {
+    await addDoc(collection(db,`households/${S.householdId}/trips/${targetTripId}/items`),{...newItem,createdAt:serverTimestamp()});
+    await deleteDoc(doc(db,`households/${S.householdId}/trips/${S.trip.id}/items/${item.id}`));
+    recalcTotals();
+    const targetSnap=await getDocs(collection(db,`households/${S.householdId}/trips/${targetTripId}/items`));
+    const tItems=targetSnap.docs.map(d=>({id:d.id,...d.data()}));
+    const tActive=tItems.filter(i=>!i.checked&&!i.isWatchlist&&i.category!=='Watchlist').reduce((s,i)=>s+effPrice(i)*(i.qty||1),0);
+    const tChecked=tItems.filter(i=>i.checked).reduce((s,i)=>s+effPrice(i)*(i.qty||1),0);
+    const tCnt=tItems.filter(i=>!i.checked).length;
+    await updateDoc(doc(db,`households/${S.householdId}/trips/${targetTripId}`),{totalActive:tActive,totalChecked:tChecked,itemCount:tCnt});
+  } catch(e){ console.error('Move to list failed',e); }
+  closeSheets();
 }
 
 async function doToggleCheck(iid){
@@ -1601,6 +1785,12 @@ async function doToggleCheck(iid){
 }
 
 async function doDeleteItem2(iid){
+  const isWl=S.watchlistItems.some(i=>i.id===iid);
+  if(isWl){
+    if(DEV){ S.watchlistItems=S.watchlistItems.filter(i=>i.id!==iid); renderTripContent(); return; }
+    await deleteDoc(doc(db,`households/${S.householdId}/stores/${S.store.id}/watchlist/${iid}`));
+    return;
+  }
   if(DEV){ S.items=S.items.filter(i=>i.id!==iid); renderTripContent(); return; }
   await deleteDoc(doc(db,`households/${S.householdId}/trips/${S.trip.id}/items/${iid}`));
   recalcTotals();
@@ -1648,9 +1838,13 @@ async function loadTrip(tripId){
     S.items=snap.docs.map(d=>({id:d.id,...d.data()}));
     if(S.screen==='trip') renderTripContent();
   });
+  const wu=onSnapshot(collection(db,`households/${S.householdId}/stores/${S.trip.storeId}/watchlist`),snap=>{
+    S.watchlistItems=snap.docs.map(d=>({id:d.id,...d.data(),isStoreWl:true}));
+    if(S.screen==='trip') renderTripContent();
+  });
   const su2=onSnapshot(fsQ(col('stores'),orderBy('sortOrder')),snap=>{ S.stores=snap.docs.map(d=>({id:d.id,...d.data()})); S.store=S.stores.find(s=>s.id===S.trip.storeId)||{categories:[]}; });
   const tu2=onSnapshot(col('trips'),snap=>{ S.trips=snap.docs.map(d=>({id:d.id,...d.data()})); });
-  S.unsubs.push(iu,su2,tu2);
+  S.unsubs.push(iu,wu,su2,tu2);
 }
 
 async function seedStores(hid){
@@ -1671,17 +1865,28 @@ async function recalcTotals(){
   await updateDoc(doc(db,`households/${S.householdId}/trips/${S.trip.id}`),{totalActive:active,totalChecked:checked,itemCount:cnt});
 }
 
-async function updCache(name,cat,price=0,isRegular=false){
+async function updCache(name,cat,price=0,isRegular=false,extras={}){
   if(!name||!S.householdId||DEV) return;
   const norm=name.toLowerCase();
   const id=norm.replace(/[^a-z0-9]/g,'_').slice(0,80);
   const ref=doc(db,`households/${S.householdId}/itemCache/${id}`);
   try {
     const snap=await getDoc(ref);
-    const update={frequency:(snap.data()?.frequency||0)+1,lastUsed:serverTimestamp(),category:cat,lastPrice:price>0?price:snap.data()?.lastPrice||0};
+    const prev=snap.data()||{};
+    const update={
+      frequency:(prev.frequency||0)+1,lastUsed:serverTimestamp(),category:cat,
+      lastPrice:price>0?price:prev.lastPrice||0,
+      lastQty:extras.qty||prev.lastQty||1,
+      lastUnit:extras.unit||prev.lastUnit||'ea',
+      lastPackSize:extras.packSize!==undefined?extras.packSize:prev.lastPackSize||'',
+      lastPriceType:extras.priceType||prev.lastPriceType||'each',
+    };
     if(isRegular) update.isRegular=true;
     if(snap.exists()) await updateDoc(ref,update);
-    else await setDoc(ref,{name,normalizedName:norm,category:cat,frequency:1,lastPrice:price,lastUsed:serverTimestamp(),isRegular:isRegular||false});
+    else await setDoc(ref,{name,normalizedName:norm,category:cat,frequency:1,
+      lastPrice:price,lastQty:extras.qty||1,lastUnit:extras.unit||'ea',
+      lastPackSize:extras.packSize||'',lastPriceType:extras.priceType||'each',
+      lastUsed:serverTimestamp(),isRegular:isRegular||false});
   } catch(e){}
 }
 
@@ -1700,12 +1905,15 @@ if(DEV){
   S.trips=[{id:'t1',storeId:'s1',storeName:'Costco Langley',storeType:'warehouse',tripDate:todayStr(),label:'Weekly',status:'active',totalActive:47.96,totalChecked:12.99,itemCount:5}];
   S.trip=S.trips[0]; S.store=S.stores[0];
   S.items=[
-    {id:'i1',name:'Bananas',           category:'Produce',        qty:3,  unit:'lb', priceType:'per_lb',price:0.69, saleDiscount:0,   saleExpiry:null,        notes:'',         isWatchlist:false,isRegular:false,checked:false,sortOrder:1},
-    {id:'i2',name:'Kirkland Whole Milk',category:'Dairy & Eggs',  qty:2,  unit:'L',  priceType:'each',  price:6.99, saleDiscount:0,   saleExpiry:null,        notes:'2% works', isWatchlist:false,isRegular:true, checked:false,sortOrder:2},
-    {id:'i3',name:'Chicken Breasts',   category:'Meat & Seafood', qty:2.5,unit:'lb', priceType:'per_lb',price:8.99, saleDiscount:1.50,saleExpiry:'2026-04-15',notes:'Boneless', isWatchlist:false,isRegular:false,checked:false,sortOrder:3},
-    {id:'i4',name:'Spinach',           category:'Produce',        qty:1,  unit:'bag',priceType:'each',  price:5.99, saleDiscount:0,   saleExpiry:null,        notes:'',         isWatchlist:false,isRegular:false,checked:true, sortOrder:4},
-    {id:'i5',name:'Dyson V15',         category:null,             qty:1,  unit:'ea', priceType:'each',  price:699.99,saleDiscount:0,  saleExpiry:null,        notes:'',         isWatchlist:true, isRegular:false,checked:false,sortOrder:5},
-    {id:'i6',name:'Sourdough Bread',   category:'Bakery & Bread', qty:1,  unit:'ea', priceType:'each',  price:8.99, saleDiscount:0,   saleExpiry:null,        notes:'',         isWatchlist:false,isRegular:false,checked:false,sortOrder:6},
+    {id:'i1',name:'Bananas',            category:'Produce',        qty:3,  unit:'lb', priceType:'per_lb',price:0.69, saleDiscount:0,   saleExpiry:null,        notes:'',         isWatchlist:false,isRegular:false,checked:false,sortOrder:1},
+    {id:'i2',name:'Kirkland Whole Milk',category:'Dairy & Eggs',   qty:2,  unit:'L',  priceType:'each',  price:6.99, saleDiscount:0,   saleExpiry:null,        notes:'2% works', isWatchlist:false,isRegular:true, checked:false,sortOrder:2},
+    {id:'i3',name:'Chicken Breasts',    category:'Meat & Seafood', qty:2.5,unit:'lb', priceType:'per_lb',price:8.99, saleDiscount:1.50,saleExpiry:'2026-04-15',notes:'Boneless', isWatchlist:false,isRegular:false,checked:false,sortOrder:3},
+    {id:'i4',name:'Spinach',            category:'Produce',        qty:1,  unit:'bag',priceType:'each',  price:5.99, saleDiscount:0,   saleExpiry:null,        notes:'',         isWatchlist:false,isRegular:false,checked:true, sortOrder:4},
+    {id:'i6',name:'Sourdough Bread',    category:'Bakery & Bread', qty:1,  unit:'ea', priceType:'each',  price:8.99, saleDiscount:0,   saleExpiry:null,        notes:'',         isWatchlist:false,isRegular:false,checked:false,sortOrder:6},
+  ];
+  S.watchlistItems=[
+    {id:'wl1',name:'Dyson V15',      category:'Electronics',qty:1,unit:'ea',priceType:'each',price:699.99,saleDiscount:0,  saleExpiry:null,        notes:'Wait for sale',isWatchlist:true,isRegular:false,isStoreWl:true},
+    {id:'wl2',name:'Vitamix Blender',category:'Electronics',qty:1,unit:'ea',priceType:'each',price:599.99,saleDiscount:50,saleExpiry:'2026-04-20',notes:'',             isWatchlist:true,isRegular:false,isStoreWl:true},
   ];
   window._devMode=true;
   go('trip');
