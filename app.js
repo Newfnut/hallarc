@@ -2037,60 +2037,6 @@ function compressImage(file,maxBytes){
     img.src=url;
   });
 }
-function compressImage(file,maxBytes){
-  return new Promise(resolve=>{
-    const img=new Image(), url=URL.createObjectURL(file);
-    img.onload=()=>{
-      URL.revokeObjectURL(url);
-      const canvas=document.createElement('canvas');
-      let w=img.width,h=img.height,maxDim=480;
-      if(w>maxDim||h>maxDim){ if(w>=h){h=Math.round(h*maxDim/w);w=maxDim;}else{w=Math.round(w*maxDim/h);h=maxDim;} }
-      canvas.width=w; canvas.height=h;
-      canvas.getContext('2d').drawImage(img,0,0,w,h);
-      let q=0.75,data='';
-      do{data=canvas.toDataURL('image/jpeg',q);q-=0.1;}while(data.length>maxBytes&&q>0.1);
-      resolve(data);
-    };
-    img.onerror=()=>resolve(null);
-    img.src=url;
-  });
-}
-function compressImage(file,maxBytes){
-  return new Promise(resolve=>{
-    const img=new Image(), url=URL.createObjectURL(file);
-    img.onload=()=>{
-      URL.revokeObjectURL(url);
-      const canvas=document.createElement('canvas');
-      let w=img.width,h=img.height,maxDim=480;
-      if(w>maxDim||h>maxDim){ if(w>=h){h=Math.round(h*maxDim/w);w=maxDim;}else{w=Math.round(w*maxDim/h);h=maxDim;} }
-      canvas.width=w; canvas.height=h;
-      canvas.getContext('2d').drawImage(img,0,0,w,h);
-      let q=0.75,data='';
-      do{data=canvas.toDataURL('image/jpeg',q);q-=0.1;}while(data.length>maxBytes&&q>0.1);
-      resolve(data);
-    };
-    img.onerror=()=>resolve(null);
-    img.src=url;
-  });
-}
-function compressImage(file,maxBytes){
-  return new Promise(resolve=>{
-    const img=new Image(), url=URL.createObjectURL(file);
-    img.onload=()=>{
-      URL.revokeObjectURL(url);
-      const canvas=document.createElement('canvas');
-      let w=img.width,h=img.height,maxDim=480;
-      if(w>maxDim||h>maxDim){ if(w>=h){h=Math.round(h*maxDim/w);w=maxDim;}else{w=Math.round(w*maxDim/h);h=maxDim;} }
-      canvas.width=w; canvas.height=h;
-      canvas.getContext('2d').drawImage(img,0,0,w,h);
-      let q=0.75,data='';
-      do{data=canvas.toDataURL('image/jpeg',q);q-=0.1;}while(data.length>maxBytes&&q>0.1);
-      resolve(data);
-    };
-    img.onerror=()=>resolve(null);
-    img.src=url;
-  });
-}
 function todayStr(){ return new Date().toISOString().split('T')[0]; }
 function fmtDate(d){ if(!d) return ''; return new Date(d+'T12:00:00').toLocaleDateString('en-CA',{weekday:'short',month:'short',day:'numeric'}); }
 function fmtShort(d){ if(!d) return ''; return new Date(d+'T12:00:00').toLocaleDateString('en-CA',{month:'short',day:'numeric'}); }
