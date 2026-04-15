@@ -1,6 +1,6 @@
 {
-  "name": "Shopper",
-  "short_name": "Shopper",
+  "name": "Shopping List",
+  "short_name": "Shopping List",
   "description": "Household shopping lists",
   "start_url": "/",
   "display": "standalone",

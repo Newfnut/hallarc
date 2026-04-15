@@ -211,7 +211,7 @@ function renderAuth() {
   return `
   <div class="screen" id="auth-screen">
     <div class="auth-logo">🛒</div>
-    <div class="auth-title">Shopper</div>
+    <div class="auth-title">Shopping List</div>
     <div class="auth-sub">Your household shopping lists</div>
     <div class="auth-form">
       ${m==='join'?`
@@ -237,6 +237,7 @@ function renderAuth() {
 // ─── Home ─────────────────────────────────────
 function renderHome() {
   // Date ASC then store name ASC
+  const storesOpen = localStorage.getItem('storesOpen') !== 'false';
   const activeTrips = S.trips.filter(t=>t.status==='active')
     .sort((a,b)=>{
       const d=(a.tripDate||'').localeCompare(b.tripDate||'');
@@ -247,7 +248,7 @@ function renderHome() {
   <div class="screen" id="home-screen">
     <div class="hdr">
       <span style="font-size:22px">🛒</span>
-      <div class="hdr-title">Shopper</div>
+      <div class="hdr-title">Shopping List</div>
       <button class="ico-btn" id="h-history" title="Trip history" style="font-size:18px;position:relative">
         🕘
         ${(()=>{const c=S.trips.filter(t=>t.status==='complete').length;return c>0?`<span style="position:absolute;top:4px;right:4px;width:8px;height:8px;background:var(--accent);border-radius:50%;border:1.5px solid var(--header)"></span>`:''})()}
@@ -262,7 +263,7 @@ function renderHome() {
           const ts=S.stores.find(s=>s.id===t.storeId);
           const bg=sColorBg(ts), txt=sColorTxt(ts);
           return `<div class="card card-tap trip-row" data-tid="${t.id}">
-            <div class="trip-icon" style="background:${bg};color:${txt}">${storeIco(t.storeType)}</div>
+            <div class="trip-icon" style="background:${bg};color:${txt}">${storeIconHTML(ts)}</div>
             <div class="trip-info">
               <div class="trip-nm">${t.storeName}</div>
               <div class="trip-meta">${fmtDate(t.tripDate)}${t.label?' · '+t.label:''} · ${t.itemCount||0} item${t.itemCount!==1?'s':''}</div>
@@ -274,20 +275,22 @@ function renderHome() {
           </div>`;
         }).join('')}
       `:''}
-      <div class="sec-hdr">Your Stores</div>
-      <div class="store-grid">
-        ${S.stores.map(s=>{
-          const bg=sColorBg(s), txt=sColorTxt(s);
-          return `<div class="store-card" data-sid="${s.id}">
-            <div class="store-icon" style="background:${bg};color:${txt}">${storeIco(s.type)}</div>
-            <div class="store-nm">${s.name}</div>
-            <div class="store-tp">${storeTypeLbl(s.type)}</div>
-            <div class="store-edit-hint">Hold to manage</div>
-          </div>`;
-        }).join('')}
-        <div class="store-card store-card-add" id="h-add-store">
-          <div style="font-size:28px;margin-bottom:6px">+</div>
-          <div style="font-size:13px;font-weight:500">Add store</div>
+      <div class="sec-hdr stores-sec-hdr" id="stores-toggle">Your Stores <span id="stores-chev" style="margin-left:5px;display:inline-block;transition:transform .2s;transform:${storesOpen?'rotate(90deg)':'rotate(0deg)'}">›</span></div>
+      <div id="stores-section" style="${storesOpen?'':'display:none'}">
+        <div class="store-grid">
+          ${S.stores.map(s=>{
+            const bg=sColorBg(s), txt=sColorTxt(s);
+            return `<div class="store-card" data-sid="${s.id}">
+            <div class="store-icon" style="background:${bg};color:${txt}">${storeIconHTML(s)}</div>
+              <div class="store-nm">${s.name}</div>
+              <div class="store-tp">${storeTypeLbl(s.type)}</div>
+              <div class="store-edit-hint">Hold to manage</div>
+            </div>`;
+          }).join('')}
+          <div class="store-card store-card-add" id="h-add-store">
+            <div style="font-size:28px;margin-bottom:6px">+</div>
+            <div style="font-size:13px;font-weight:500">Add store</div>
+          </div>
         </div>
       </div>
     </div>
@@ -322,6 +325,8 @@ function renderHome() {
       </div>
       <div class="fg" style="margin-bottom:4px"><label class="fg-label">Colour</label></div>
       <div class="color-swatches" id="new-store-colors">${colorSwatchesHTML('green')}</div>
+      <div class="fg"><label class="fg-label">Custom icon <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;color:var(--text-muted)">(optional — paste any emoji)</span></label>
+        <input class="finput emoji-inp" id="s-icon" type="text" placeholder="e.g. 🏪" maxlength="2"></div>
       <button class="btn-main" id="s-save">Add Store</button>
       <div style="height:8px"></div>
     </div>
@@ -370,7 +375,9 @@ function renderHome() {
       <div class="fg"><label class="fg-label">Store name</label>
         <input class="finput" id="se-name" type="text"></div>
       <div class="fg" style="margin-bottom:4px"><label class="fg-label">Colour</label></div>
-      <div class="color-swatches" id="se-colors"></div>
+     <div class="color-swatches" id="se-colors"></div>
+      <div class="fg"><label class="fg-label">Custom icon <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;color:var(--text-muted)">(optional — paste any emoji)</span></label>
+        <input class="finput emoji-inp" id="se-icon" type="text" placeholder="e.g. 🏪" maxlength="2"></div>
       <button class="btn-main" id="se-save">Save Changes</button>
       <div style="height:8px"></div>
     </div>
@@ -642,7 +649,9 @@ function rowHTML(item, dim=false, isStoreWl=false) {
   <div class="item-wrap" data-iid="${item.id}" draggable="true"${isStoreWl?' data-swl="true"':''}>
     <div class="item-reveal">
       <div class="item-reveal-left">${isStoreWl?'＋ Add to trip':'✓ Check off'}</div>
-      <div class="item-reveal-right">${isStoreWl?'Remove ✕':'Delete ✕'}</div>
+      ${isStoreWl
+        ?`<div class="item-reveal-right">Remove ✕</div>`
+        :`<div class="item-reveal-right irr-split"><div class="irr-del">🗑 Delete</div><div class="irr-move">↗ Move</div></div>`}
     </div>
     <div class="item-row${item.checked?' checked':''}${dim?' item-dim':''}" data-iid="${item.id}">
       <div class="item-circle"></div>
@@ -653,6 +662,7 @@ function rowHTML(item, dim=false, isStoreWl=false) {
         ${hasSale?`<div class="sale-tag${saleExpiringSoon?' expiring':''}">SALE −$${item.saleDiscount.toFixed(2)}${saleExpiryStr?` <span style="font-weight:400;opacity:.8">${saleExpiryStr}</span>`:''}</div>`:''}
         ${item.isRegular?`<div class="reg-tag">⭐ Regular</div>`:''}
       </div>
+      ${item.photoData?`<img src="${item.photoData}" class="item-photo-thumb" alt="">`:''}
       <div class="item-right">
         ${priceHTML}
         <div class="item-qty">${qtyLabel}</div>
@@ -731,6 +741,18 @@ function renderEditor() {
   <div class="fg"><label class="fg-label">Notes</label>
     <input class="finput" id="e-notes" type="text" value="${esc(item.notes||'')}" placeholder="Any details…"></div>
 
+  <div class="fg" style="margin-top:2px">
+    <label class="fg-label">Photo <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;color:var(--text-muted)">(optional — visual reference)</span></label>
+    <input type="file" accept="image/*" id="e-photo-input" style="display:none">
+    <div id="e-photo-preview" style="${item.photoData?'':'display:none'}">
+      <div class="editor-photo-wrap">
+        <img id="e-photo-img" src="${item.photoData||''}" class="editor-photo-preview" alt="">
+        <button type="button" id="e-photo-remove" class="editor-photo-remove">✕</button>
+      </div>
+    </div>
+    <button type="button" id="e-photo-add-btn" class="editor-photo-add" style="${item.photoData?'display:none':''}">📷 Add photo</button>
+  </div>
+
   <div class="tog-row" style="margin-top:6px">
     <div class="tog-info"><div class="tog-lbl">Regular Buy ⭐</div><div class="tog-sub">Quick re-add on future trips</div></div>
     <div class="tog${item.isRegular?' on':''}" id="reg-tog"></div>
@@ -777,7 +799,7 @@ function renderHistory() {
           <div class="hist-card" data-hid="${t.id}">
             <div class="hist-card-inner">
               <div class="hist-top">
-                <div class="hist-icon">${storeIco(t.storeType)}</div>
+                ${(()=>{const _hs=S.stores.find(s=>s.id===t.storeId);return `<div class="hist-icon" style="background:${sColorBg(_hs)};color:${sColorTxt(_hs)}">${storeIconHTML(_hs)}</div>`;})()}
                 <div style="flex:1;min-width:0">
                   <div class="hist-store">${t.storeName}</div>
                   <div class="hist-date">${fmtDate(t.tripDate)}${t.label?' · '+t.label:''}</div>
@@ -874,6 +896,15 @@ function bindHome() {
   on('h-user','click',()=>openSheet('user-sheet'));
   on('h-add-store','click',()=>openSheet('store-sheet'));
   on('h-history','click',()=>{haptic('light');goHistory();});
+  on('stores-toggle','click',()=>{
+    const sec=q('stores-section'), chev=q('stores-chev');
+    if(!sec) return;
+    const open=sec.style.display!=='none';
+    sec.style.display=open?'none':'';
+    if(chev) chev.style.transform=open?'rotate(0deg)':'rotate(90deg)';
+    localStorage.setItem('storesOpen',String(!open));
+    haptic('light');
+  });
   on('u-signout','click',doSignOut);
   on('d-create','click',doCreateTrip);
   on('s-save','click',doSaveStore);
@@ -924,6 +955,8 @@ function openStoreNameEditor(storeId) {
   _editStoreColor=S.ctxStore.color||'green';
   const nameInp=q('se-name');
   if(nameInp) nameInp.value=S.ctxStore.name;
+  const iconInp=q('se-icon');
+  if(iconInp) iconInp.value=S.ctxStore.icon||'';
   const container=q('se-colors');
   if(container) container.innerHTML=colorSwatchesHTML(_editStoreColor);
   bindColorSwatches('se-colors',id=>{_editStoreColor=id;});
@@ -934,9 +967,10 @@ function openStoreNameEditor(storeId) {
 async function doSaveStoreName() {
   if(!S.ctxStore) return;
   const name=q('se-name')?.value.trim(); if(!name) return;
+  const icon=(q('se-icon')?.value.trim())||'';
   haptic('medium');
-  if(DEV){ const s=S.stores.find(s=>s.id===S.ctxStore.id); if(s){s.name=name;s.color=_editStoreColor;} closeSheets();render();return; }
-  await updateDoc(doc(db,`households/${S.householdId}/stores/${S.ctxStore.id}`),{name,color:_editStoreColor});
+  if(DEV){ const s=S.stores.find(s=>s.id===S.ctxStore.id); if(s){s.name=name;s.color=_editStoreColor;s.icon=icon;} closeSheets();render();return; }
+  await updateDoc(doc(db,`households/${S.householdId}/stores/${S.ctxStore.id}`),{name,color:_editStoreColor,icon});
   closeSheets();
 }
 
@@ -972,10 +1006,11 @@ async function doSaveStore() {
   const name=q('s-name').value.trim(); if(!name) return;
   haptic('medium');
   const type=document.querySelector('#type-grid [data-type].sel')?.dataset.type||'custom';
-  const storeData={name,type,color:_newStoreColor,categories:TEMPLATES[type].categories,sortOrder:S.stores.length,createdAt:serverTimestamp()};
-  if(DEV){ S.stores.push({id:'dev-s-'+Date.now(),...storeData}); q('s-name').value=''; _newStoreColor='green'; closeSheets();render();return; }
+  const icon=(q('s-icon')?.value.trim())||'';
+  const storeData={name,type,color:_newStoreColor,icon,categories:TEMPLATES[type].categories,sortOrder:S.stores.length,createdAt:serverTimestamp()};
+  if(DEV){ S.stores.push({id:'dev-s-'+Date.now(),...storeData}); q('s-name').value=''; if(q('s-icon'))q('s-icon').value=''; _newStoreColor='green'; closeSheets();render();return; }
   await addDoc(col('stores'),storeData);
-  q('s-name').value=''; _newStoreColor='green'; closeSheets();
+  q('s-name').value=''; if(q('s-icon'))q('s-icon').value=''; _newStoreColor='green'; closeSheets();
 }
 
 function bindHistory() {
@@ -1063,20 +1098,32 @@ function doDownloadCSV(){
   const items = S.histDetailItems || [];
   if(!trip) return;
   haptic('light');
-  const rows = [['Name','Category','Qty','Unit','Price Type','Unit Price','Sale Discount','Effective Price','Checked']];
+  const rows = [['Name','Category','Pack Size','Qty','Unit','Price Type','Unit Price','Sale Discount','Effective Unit Price','Line Total','Notes','Checked']];
   items.forEach(i => {
+    const eff = effPrice(i);
+    const qty = i.qty || 1;
     rows.push([
       i.name,
       i.category || '',
-      i.qty || 1,
+      i.packSize || '',
+      qty,
       i.unit || 'ea',
       i.priceType || 'each',
       (i.price || 0).toFixed(2),
       (i.saleDiscount || 0).toFixed(2),
-      effPrice(i).toFixed(2),
+      eff.toFixed(2),
+      (eff * qty).toFixed(2),
+      i.notes || '',
       i.checked ? 'Yes' : 'No'
     ]);
   });
+  const checkedItems = items.filter(i => i.checked);
+  const grandTotal = checkedItems.reduce((s,i) => s + effPrice(i)*(i.qty||1), 0);
+  const savings = items.reduce((s,i) => s + (i.saleDiscount && saleActive(i) ? i.saleDiscount*(i.qty||1) : 0), 0);
+  rows.push([]);
+  rows.push(['TOTAL SPENT','','','','','','','','','$'+grandTotal.toFixed(2),'','']);
+  if(savings > 0) rows.push(['TOTAL SAVINGS','','','','','','','','','$'+savings.toFixed(2),'','']);
+  rows.push(['Items checked','','','','','','','','',checkedItems.length+' / '+items.length,'','']);
   const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob = new Blob([csv], {type:'text/csv'});
   const url = URL.createObjectURL(blob);
@@ -1458,7 +1505,25 @@ function bindEditor(){
   on('reg-tog','click',()=>{ _reg=!_reg; q('reg-tog').classList.toggle('on',_reg); haptic('light'); });
   on('e-save','click',doSaveItem);
   on('e-del','click',doDeleteItem);
+  on('e-photo-add-btn','click',()=>q('e-photo-input')?.click());
+  on('e-photo-remove','click',()=>{
+    S.editorItem.photoData=null;
+    const prev=q('e-photo-preview'); if(prev) prev.style.display='none';
+    const addBtn=q('e-photo-add-btn'); if(addBtn) addBtn.style.display='';
+    const img=q('e-photo-img'); if(img) img.src='';
+    const pi=q('e-photo-input'); if(pi) pi.value='';
+  });
+  const _pi=q('e-photo-input');
+  if(_pi) _pi.addEventListener('change',async e=>{
+    const file=e.target.files?.[0]; if(!file) return;
+    const data=await compressImage(file,65000); if(!data) return;
+    S.editorItem.photoData=data;
+    const img=q('e-photo-img'); if(img) img.src=data;
+    const prev=q('e-photo-preview'); if(prev) prev.style.display='';
+    const addBtn=q('e-photo-add-btn'); if(addBtn) addBtn.style.display='none';
+  });
   on('editor-sheet','click',e=>{ if(e.target.id==='editor-sheet') closeSheets(); });
+
 
   qAll('.wt-btn').forEach(b=>b.addEventListener('click',()=>{ qAll('.wt-btn').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); _wt=b.dataset.pt; haptic('light'); updateWeightEquiv(); }));
   const wPriceInp=q('e-wprice');
@@ -1503,7 +1568,8 @@ async function doSaveItem(){
 
   const disc=_sale?(parseFloat(q('e-disc')?.value)||0):0;
   const exp=_sale?(q('e-exp')?.value||null):null;
-  const baseData={name,category:cat,qty,unit,packSize,priceType:finalPriceType,price:finalPrice,saleDiscount:disc,saleExpiry:exp,notes,isRegular:_reg};
+  const photoData=S.editorItem?.photoData||null;
+  const baseData={name,category:cat,qty,unit,packSize,priceType:finalPriceType,price:finalPrice,saleDiscount:disc,saleExpiry:exp,notes,isRegular:_reg,photoData};
   haptic('medium');
 
   const isStoreWl=S.editorItem?.isStoreWl||false;
@@ -1618,13 +1684,22 @@ function setupSwipe(wrap,row,iid,isStoreWl=false){
     const dx=e.touches[0].clientX-sx, dy=e.touches[0].clientY-sy;
     if(Math.abs(dy)>Math.abs(dx)*1.3){ going=false; return; }
     e.preventDefault();
-    cx=Math.max(-100,Math.min(100,dx));
+    cx=Math.max(isStoreWl?-100:-220,Math.min(100,dx));
     row.style.transform=`translateX(${cx}px)`;
+    if(!isStoreWl){
+      const dEl=wrap.querySelector('.irr-del'),mEl=wrap.querySelector('.irr-move');
+      if(dEl&&mEl){ dEl.classList.toggle('hi',cx<-70&&cx>=-140); mEl.classList.toggle('hi',cx<-140); }
+    }
   },{passive:false});
   row.addEventListener('touchend',()=>{
     if(!going) return; going=false;
     row.style.transition='transform .25s ease';
-    if(cx<-THRESH){
+    const dEl2=wrap.querySelector('.irr-del'),mEl2=wrap.querySelector('.irr-move');
+    if(dEl2) dEl2.classList.remove('hi');
+    if(mEl2) mEl2.classList.remove('hi');
+    if(!isStoreWl&&cx<-140){
+      row.style.transform=''; haptic('medium'); setTimeout(()=>openMoveToList(iid),50);
+    } else if(cx<-65){
       const msg=isStoreWl?'Remove from watchlist?':'Delete this item?';
       if(!confirm(msg)){ row.style.transform=''; return; }
       haptic('heavy'); row.style.transform='translateX(-110%)'; setTimeout(()=>doDeleteItem2(iid),240);
@@ -1651,7 +1726,7 @@ async function doMoveToWatchlist(iid){
   await deleteDoc(doc(db,`households/${S.householdId}/trips/${S.trip.id}/items/${iid}`));
   recalcTotals();
 }
-    } else if(cx>THRESH){
+    } else if(cx>65){
       haptic('medium');
       row.style.transform='translateX(110%)';
       setTimeout(()=>{
@@ -1944,17 +2019,98 @@ function esc(s){ return String(s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;'
 function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
 function rndCode(){ return Math.random().toString(36).toUpperCase().slice(2,8); }
 function debounce(fn,ms){ let t; return(...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; }
+function compressImage(file,maxBytes){
+  return new Promise(resolve=>{
+    const img=new Image(), url=URL.createObjectURL(file);
+    img.onload=()=>{
+      URL.revokeObjectURL(url);
+      const canvas=document.createElement('canvas');
+      let w=img.width,h=img.height,maxDim=480;
+      if(w>maxDim||h>maxDim){ if(w>=h){h=Math.round(h*maxDim/w);w=maxDim;}else{w=Math.round(w*maxDim/h);h=maxDim;} }
+      canvas.width=w; canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      let q=0.75,data='';
+      do{data=canvas.toDataURL('image/jpeg',q);q-=0.1;}while(data.length>maxBytes&&q>0.1);
+      resolve(data);
+    };
+    img.onerror=()=>resolve(null);
+    img.src=url;
+  });
+}
+function compressImage(file,maxBytes){
+  return new Promise(resolve=>{
+    const img=new Image(), url=URL.createObjectURL(file);
+    img.onload=()=>{
+      URL.revokeObjectURL(url);
+      const canvas=document.createElement('canvas');
+      let w=img.width,h=img.height,maxDim=480;
+      if(w>maxDim||h>maxDim){ if(w>=h){h=Math.round(h*maxDim/w);w=maxDim;}else{w=Math.round(w*maxDim/h);h=maxDim;} }
+      canvas.width=w; canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      let q=0.75,data='';
+      do{data=canvas.toDataURL('image/jpeg',q);q-=0.1;}while(data.length>maxBytes&&q>0.1);
+      resolve(data);
+    };
+    img.onerror=()=>resolve(null);
+    img.src=url;
+  });
+}
+function compressImage(file,maxBytes){
+  return new Promise(resolve=>{
+    const img=new Image(), url=URL.createObjectURL(file);
+    img.onload=()=>{
+      URL.revokeObjectURL(url);
+      const canvas=document.createElement('canvas');
+      let w=img.width,h=img.height,maxDim=480;
+      if(w>maxDim||h>maxDim){ if(w>=h){h=Math.round(h*maxDim/w);w=maxDim;}else{w=Math.round(w*maxDim/h);h=maxDim;} }
+      canvas.width=w; canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      let q=0.75,data='';
+      do{data=canvas.toDataURL('image/jpeg',q);q-=0.1;}while(data.length>maxBytes&&q>0.1);
+      resolve(data);
+    };
+    img.onerror=()=>resolve(null);
+    img.src=url;
+  });
+}
+function compressImage(file,maxBytes){
+  return new Promise(resolve=>{
+    const img=new Image(), url=URL.createObjectURL(file);
+    img.onload=()=>{
+      URL.revokeObjectURL(url);
+      const canvas=document.createElement('canvas');
+      let w=img.width,h=img.height,maxDim=480;
+      if(w>maxDim||h>maxDim){ if(w>=h){h=Math.round(h*maxDim/w);w=maxDim;}else{w=Math.round(w*maxDim/h);h=maxDim;} }
+      canvas.width=w; canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      let q=0.75,data='';
+      do{data=canvas.toDataURL('image/jpeg',q);q-=0.1;}while(data.length>maxBytes&&q>0.1);
+      resolve(data);
+    };
+    img.onerror=()=>resolve(null);
+    img.src=url;
+  });
+}
 function todayStr(){ return new Date().toISOString().split('T')[0]; }
 function fmtDate(d){ if(!d) return ''; return new Date(d+'T12:00:00').toLocaleDateString('en-CA',{weekday:'short',month:'short',day:'numeric'}); }
 function fmtShort(d){ if(!d) return ''; return new Date(d+'T12:00:00').toLocaleDateString('en-CA',{month:'short',day:'numeric'}); }
 function storeIco(t){ return t==='warehouse'?'🏪':t==='supermarket'?'🛒':'🏬'; }
 function storeTypeLbl(t){ return t==='warehouse'?'Warehouse':t==='supermarket'?'Supermarket':'Custom'; }
+function storeIconHTML(store){ if(store?.icon) return `<span style="font-size:22px">${store.icon}</span>`; return `<img src="./store-icon.png" alt="">`; }
 function effPrice(item){ const b=item.price||0; if(!item.saleDiscount||!saleActive(item)) return b; return Math.max(0,b-item.saleDiscount); }
 function saleActive(item){ if(!item.saleExpiry) return(item.saleDiscount||0)>0; return new Date(item.saleExpiry+'T12:00:00')>=new Date(todayStr()+'T00:00:00'); }
 
-function openSheet(id){ const el=q(id); if(!el) return; el.style.display='flex'; requestAnimationFrame(()=>el.classList.add('open')); }
+function openSheet(id){ const el=q(id); if(!el) return; el.style.display='flex'; requestAnimationFrame(()=>{ el.classList.add('open'); const sheet=el.querySelector('.sheet'); if(sheet) bindSheetDrag(sheet); }); }
+function bindSheetDrag(sheet){
+  if(sheet._dragBound) return; sheet._dragBound=true;
+  const handle=sheet.querySelector('.sheet-handle'); if(!handle) return;
+  let sy=0, going=false;
+  handle.addEventListener('touchstart',e=>{ sy=e.touches[0].clientY; going=true; sheet.style.transition='none'; },{passive:true});
+  handle.addEventListener('touchmove',e=>{ if(!going) return; const dy=e.touches[0].clientY-sy; if(dy>0) sheet.style.transform=`translateY(${dy}px)`; },{passive:true});
+  handle.addEventListener('touchend',e=>{ if(!going) return; going=false; const dy=e.changedTouches[0].clientY-sy; sheet.style.transition=''; if(dy>80){ closeSheets(); } else { sheet.style.transform=''; } });
+}
 function closeSheets(){
-  qAll('.overlay').forEach(el=>{ el.classList.remove('open'); setTimeout(()=>{ if(!el.classList.contains('open')) el.style.display='none'; },300); });
+  qAll('.overlay').forEach(el=>{ el.classList.remove('open'); const sheet=el.querySelector('.sheet'); if(sheet){ sheet.style.transform=''; sheet.style.transition=''; } setTimeout(()=>{ if(!el.classList.contains('open')) el.style.display='none'; },300); });
   if(S.tripNeedsUpdate&&S.screen==='trip'){ setTimeout(()=>{ S.tripNeedsUpdate=false; renderTripContent(); },320); }
 }
 function bindOverlayClose(){ qAll('.overlay').forEach(el=>el.addEventListener('click',e=>{ if(e.target===el) closeSheets(); })); }
