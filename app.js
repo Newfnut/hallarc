@@ -262,8 +262,8 @@ function renderHome() {
         ${activeTrips.map(t=>{
           const ts=S.stores.find(s=>s.id===t.storeId);
           const bg=sColorBg(ts), txt=sColorTxt(ts);
-          return `<div class="card card-tap trip-row" data-tid="${t.id}">
-            <div class="trip-icon" style="background:${bg};color:${txt}">${storeIconHTML(ts)}</div>
+               return `<div class="card card-tap trip-row" data-tid="${t.id}">
+            <div class="trip-icon">${storeIconHTML(ts)}</div>
             <div class="trip-info">
               <div class="trip-nm">${t.storeName}</div>
               <div class="trip-meta">${fmtDate(t.tripDate)}${t.label?' · '+t.label:''} · ${t.itemCount||0} item${t.itemCount!==1?'s':''}</div>
@@ -657,10 +657,10 @@ function rowHTML(item, dim=false, isStoreWl=false) {
       <div class="item-circle"></div>
       <div class="item-body">
         <div class="item-nm">${item.name}</div>
-        <div class="item-detail">${item.category||''}${item.packSize?' · '+item.packSize:''}${item.notes?' · '+item.notes:''}</div>
+         <div class="item-detail">${item.packSize||''}${item.notes?(item.packSize?' · ':'')+item.notes:''}</div>
         ${unitDual?`<div class="unit-both">${unitDual}</div>`:''}
         ${hasSale?`<div class="sale-tag${saleExpiringSoon?' expiring':''}">SALE −$${item.saleDiscount.toFixed(2)}${saleExpiryStr?` <span style="font-weight:400;opacity:.8">${saleExpiryStr}</span>`:''}</div>`:''}
-        ${item.isRegular?`<div class="reg-tag">⭐ Regular</div>`:''}
+    
       </div>
       ${item.photoData?`<img src="${item.photoData}" class="item-photo-thumb" alt="">`:''}
       <div class="item-right">
@@ -1748,11 +1748,39 @@ function setupLongPress(row,iid){
 }
 
 function setupDragSort(wrap,iid){
+  // Desktop drag — still on full wrap
   wrap.addEventListener('dragstart',e=>{ S.dragId=iid; wrap.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',iid); });
   wrap.addEventListener('dragend',()=>{ wrap.classList.remove('dragging'); qAll('.item-wrap.drag-over').forEach(el=>el.classList.remove('drag-over')); S.dragId=null; });
   wrap.addEventListener('dragover',e=>{ e.preventDefault(); e.dataTransfer.dropEffect='move'; if(S.dragId&&S.dragId!==iid){ qAll('.item-wrap.drag-over').forEach(el=>el.classList.remove('drag-over')); wrap.classList.add('drag-over'); } });
   wrap.addEventListener('dragleave',()=>wrap.classList.remove('drag-over'));
   wrap.addEventListener('drop',e=>{ e.preventDefault(); wrap.classList.remove('drag-over'); if(S.dragId&&S.dragId!==iid){ haptic('light'); doReorderItem(S.dragId,iid); } });
+
+  // Touch drag — circle handle only, unchecked items
+  const circle=wrap.querySelector('.item-circle');
+  const row=wrap.querySelector('.item-row');
+  if(!circle||row?.classList.contains('checked')) return;
+  circle.addEventListener('touchstart',e=>{
+    e.stopPropagation();
+    S.dragId=iid; wrap.classList.add('dragging');
+    const onMove=ev=>{
+      ev.preventDefault();
+      const y=ev.touches[0].clientY;
+      qAll('.item-wrap.drag-over').forEach(el=>el.classList.remove('drag-over'));
+      const all=[...document.querySelectorAll('.item-wrap:not(.dragging)')];
+      const target=all.find(el=>{ const r=el.getBoundingClientRect(); return y>=r.top&&y<=r.bottom; });
+      if(target) target.classList.add('drag-over');
+    };
+    const onEnd=()=>{
+      document.removeEventListener('touchmove',onMove);
+      document.removeEventListener('touchend',onEnd);
+      wrap.classList.remove('dragging');
+      const over=document.querySelector('.item-wrap.drag-over');
+      if(over){ over.classList.remove('drag-over'); const toId=over.dataset.iid; if(toId&&toId!==iid){ haptic('light'); doReorderItem(iid,toId); } }
+      S.dragId=null;
+    };
+    document.addEventListener('touchmove',onMove,{passive:false});
+    document.addEventListener('touchend',onEnd);
+  },{passive:true});
 }
 
 async function doReorderItem(fromId,toId){
@@ -2025,8 +2053,8 @@ function compressImage(file,maxBytes){
     img.onload=()=>{
       URL.revokeObjectURL(url);
       const canvas=document.createElement('canvas');
-      let w=img.width,h=img.height,maxDim=480;
-      if(w>maxDim||h>maxDim){ if(w>=h){h=Math.round(h*maxDim/w);w=maxDim;}else{w=Math.round(w*maxDim/h);h=maxDim;} }
+      let w=img.width,h=img.height,maxW=270,maxH=480;
+      if(w>maxW||h>maxH){ const rs=Math.min(maxW/w,maxH/h); w=Math.round(w*rs); h=Math.round(h*rs); }
       canvas.width=w; canvas.height=h;
       canvas.getContext('2d').drawImage(img,0,0,w,h);
       let q=0.75,data='';
@@ -2051,9 +2079,10 @@ function bindSheetDrag(sheet){
   if(sheet._dragBound) return; sheet._dragBound=true;
   const handle=sheet.querySelector('.sheet-handle'); if(!handle) return;
   let sy=0, going=false;
-  handle.addEventListener('touchstart',e=>{ sy=e.touches[0].clientY; going=true; sheet.style.transition='none'; },{passive:true});
-  handle.addEventListener('touchmove',e=>{ if(!going) return; const dy=e.touches[0].clientY-sy; if(dy>0) sheet.style.transform=`translateY(${dy}px)`; },{passive:true});
-  handle.addEventListener('touchend',e=>{ if(!going) return; going=false; const dy=e.changedTouches[0].clientY-sy; sheet.style.transition=''; if(dy>80){ closeSheets(); } else { sheet.style.transform=''; } });
+  const dragZone=sheet;
+  dragZone.addEventListener('touchstart',e=>{ if(e.touches[0].clientY>sheet.getBoundingClientRect().top+48) return; sy=e.touches[0].clientY; going=true; sheet.style.transition='none'; },{passive:true});
+  dragZone.addEventListener('touchmove',e=>{ if(!going) return; const dy=e.touches[0].clientY-sy; if(dy>0) sheet.style.transform=`translateY(${dy}px)`; },{passive:true});
+  dragZone.addEventListener('touchend',e=>{ if(!going) return; going=false; const dy=e.changedTouches[0].clientY-sy; sheet.style.transition=''; if(dy>40){ closeSheets(); } else { sheet.style.transform=''; } });
 }
 function closeSheets(){
   qAll('.overlay').forEach(el=>{ el.classList.remove('open'); const sheet=el.querySelector('.sheet'); if(sheet){ sheet.style.transform=''; sheet.style.transition=''; } setTimeout(()=>{ if(!el.classList.contains('open')) el.style.display='none'; },300); });
