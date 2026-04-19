@@ -113,7 +113,7 @@ body{display:flex;justify-content:center;background:var(--bg)}
 .cat-watchlist .cat-label{color:var(--text-muted)!important;opacity:.7}
 .cat-watchlist .cat-badge{background:var(--bg-secondary)!important;color:var(--text-muted)!important;opacity:.7}
 .cat-watchlist .cat-chev{color:var(--text-muted)!important;opacity:.7}
-.cat-items-wrap{background:var(--bg-card);border-radius:0;margin:0;overflow:hidden;box-shadow:none}
+.cat-items-wrap{background:var(--bg-card);border-radius:0;margin:0;overflow:hidden;box-shadow:none;border-top:.5px solid #d1d1d6}
 
 /* ─── Item rows ─── */
 .item-wrap{position:relative;overflow:hidden}
@@ -132,7 +132,7 @@ body{display:flex;justify-content:center;background:var(--bg)}
 .irr-del.hi{opacity:1}
 .irr-move{background:#7c3aed;opacity:.35}
 .irr-move.hi{opacity:1}
-.item-row{display:flex;align-items:center;gap:10px;padding:11px 16px;background:#ffffff;border-bottom:.5px solid rgba(60,60,67,.2);position:relative;z-index:1;will-change:transform;min-height:54px;-webkit-tap-highlight-color:transparent}
+.item-row{display:flex;align-items:center;gap:10px;padding:11px 16px;background:#ffffff;border-bottom:.5px solid #d1d1d6;position:relative;z-index:1;will-change:transform;min-height:54px;-webkit-tap-highlight-color:transparent}
 .item-row:last-child{border-bottom:none}
 /* ─── FIX: dim watchlist items without making background transparent (which exposed reveal layer) ─── */
 .item-row.item-dim .item-circle,
