@@ -663,11 +663,12 @@ function renderEditor() {
   const wType        = item.priceType==='per_kg' ? 'per_kg' : 'per_lb';
 
   return `
+  <div style="height:20px"></div>
   <div class="sheet-handle"></div>
   <div class="sheet-hdr-row">
     <div style="flex:1;font-size:17px;font-weight:600">${S.editorMode==='add'?'Add item':'Edit item'}</div>
-    ${S.editorMode==='edit'?`<button class="ico-btn" id="e-del" style="color:var(--danger);font-size:16px">🗑 Delete</button>`:''}
-  <button class="ico-btn" id="e-save-top" style="color:var(--accent);font-size:20px" title="Save">💾</button>
+    ${S.editorMode==='edit'?`<button class="ico-btn" id="e-del" style="color:var(--danger);font-size:20px">🗑</button>`:''}
+    <button class="ico-btn" id="e-save-top" style="color:var(--accent);font-size:20px">✅</button>
   </div>
 
   <div class="fg"><label class="fg-label">Item name</label>
