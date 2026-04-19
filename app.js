@@ -443,7 +443,7 @@ function renderTrip() {
       </div>
       <button class="ico-btn" id="t-theme">${S.theme==='dark'?'☀️':'🌙'}</button>
       <button class="ico-btn" id="t-regulars" title="Regular items" style="font-size:16px">⭐</button>
-      <button class="ico-btn" id="t-scan" title="Scan barcode" style="font-size:18px">📷</button>
+      
       <button class="complete-btn" id="t-complete">Complete ✓</button>
     </div>
 
@@ -578,27 +578,7 @@ function renderTrip() {
       <div style="height:8px"></div>
     </div>
   </div>
-  <!-- Barcode scanner sheet -->
-  <div class="overlay" id="scanner-sheet">
-    <div class="sheet">
-      <div class="sheet-handle"></div>
-      <div class="sheet-hdr-row">
-        <div style="flex:1;font-size:17px;font-weight:600">📷 Scan Barcode</div>
-        <button class="ico-btn" id="scan-close" style="font-size:14px;color:var(--text-secondary)">✕</button>
-      </div>
-      <div class="scanner-wrap">
-        <video class="scanner-video" id="scan-video" playsinline muted autoplay></video>
-        <div class="scanner-aim">
-          <div class="scanner-box"><div class="scanner-line"></div></div>
-        </div>
-      </div>
-      <div class="scanner-status" id="scan-status">Starting camera…</div>
-      <div id="scan-result" style="display:none"></div>
-      <button class="btn-main" id="scan-use-btn" style="display:none">Add to List</button>
-      <button class="btn-main btn-ghost" id="scan-retry-btn" style="display:none;margin-top:8px">Scan again</button>
-      <div style="height:8px"></div>
-    </div>
-  </div>`;
+  `;
 }
 
 // ─── Item row HTML ────────────────────────────
@@ -1265,8 +1245,7 @@ function bindTrip(){
   on('t-theme','click',()=>{ setTheme(S.theme==='dark'?'light':'dark'); renderTripContent(); });
   on('t-complete','click',doCompleteTrip);
   on('t-regulars','click',openRegularsSheet);
-  on('t-scan','click',openScanner);
-  on('scan-close','click',closeScanner);
+  
   on('t-addBtn','click',doQuickAdd);
   on('t-date-lbl','click',()=>openSheet('edit-date-sheet'));
   on('ed-save','click',doEditTripDate);
@@ -1432,10 +1411,7 @@ async function doAddRegulars(){
   if(DEV) renderTripContent();
 }
 
-// ─── Barcode scanner ─────────────────────────
-let _scanActive=false, _scanReader=null, _scanResult=null;
 
-async function openScanner(){
   _scanActive=true; _scanResult=null;
   openSheet('scanner-sheet');
   const status=q('scan-status'),resultEl=q('scan-result'),useBtn=q('scan-use-btn'),retryBtn=q('scan-retry-btn');
@@ -1459,37 +1435,9 @@ async function openScanner(){
     if(status) status.textContent=e.name==='NotAllowedError'?'📵 Camera access denied — allow camera in Settings and try again':`⚠️ ${e.message||'Camera unavailable'}`;
     if(retryBtn) retryBtn.style.display='block';
   }
-}
 
-function closeScanner(){ _scanActive=false; try{ _scanReader?.reset(); }catch(_){} _scanReader=null; closeSheets(); }
 
-async function doScanResult(barcode){
-  const status=q('scan-status'),resultEl=q('scan-result'),useBtn=q('scan-use-btn'),retryBtn=q('scan-retry-btn');
-  if(status) status.textContent=`🔍 Barcode ${barcode} — looking up…`;
-  let product=null;
-  try {
-    const r=await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
-    const d=await r.json();
-    if(d.status===1&&d.product){ const p=d.product; const name=(p.product_name_en||p.product_name||'').trim(); if(name) product={name,category:guessCategory(name,S.store?.categories||[]),barcode}; }
-  } catch(_){}
-  if(!resultEl||!useBtn||!retryBtn) return;
-  if(product){
-    _scanResult=product;
-    resultEl.innerHTML=`<div class="scan-result-row"><div style="font-size:26px">${catIcon(product.category)}</div><div><div class="scan-result-name">${esc(product.name)}</div><div class="scan-result-cat">${product.category||'Uncategorized'} · ${barcode}</div></div></div>`;
-    resultEl.style.display='block';
-    useBtn.textContent=`Add "${product.name.length>28?product.name.slice(0,26)+'…':product.name}"`;
-    useBtn.style.display='block';
-    if(status) status.textContent='✅ Product found!';
-  } else {
-    _scanResult={name:'',category:null,barcode};
-    resultEl.innerHTML=`<div class="scan-result-row warn"><div style="font-size:24px">🏷️</div><div><div class="scan-result-name" style="color:var(--warning)">Barcode: ${barcode}</div><div class="scan-result-cat">Not found in Open Food Facts — enter name manually</div></div></div>`;
-    resultEl.style.display='block'; useBtn.textContent='Add manually…'; useBtn.style.display='block';
-    if(status) status.textContent='⚠️ Unknown product';
-  }
-  retryBtn.style.display='block';
-  useBtn.onclick=()=>{ haptic('light'); const item=_scanResult; closeScanner(); openEditor('add',{name:item.name,category:item.category}); };
-  retryBtn.onclick=()=>{ if(resultEl) resultEl.style.display='none'; if(useBtn) useBtn.style.display='none'; if(retryBtn) retryBtn.style.display='none'; _scanActive=true; _scanResult=null; openScanner(); };
-}
+
 
 // ─── Editor bindings ─────────────────────────
 let _sale=false, _wl=false, _reg=false, _wt='per_lb';
@@ -1703,30 +1651,7 @@ function setupSwipe(wrap,row,iid,isStoreWl=false){
       const msg=isStoreWl?'Remove from watchlist?':'Delete this item?';
       if(!confirm(msg)){ row.style.transform=''; return; }
       haptic('heavy'); row.style.transform='translateX(-110%)'; setTimeout(()=>doDeleteItem2(iid),240);
-      async function doAddWatchlistToTrip(iid){
-  const item=S.watchlistItems.find(i=>i.id===iid); if(!item) return;
-  haptic('medium');
-  const cat=item.category||guessCategory(item.name,S.store?.categories||[])||'';
-  const data={name:item.name,category:cat,qty:item.qty||1,unit:item.unit||'ea',priceType:item.priceType||'each',price:item.price||0,saleDiscount:item.saleDiscount||0,saleExpiry:item.saleExpiry||null,notes:item.notes||'',isWatchlist:false,isRegular:item.isRegular||false,checked:false,sortOrder:Date.now()};
-  if(DEV){ S.items.push({id:'dev-'+Date.now(),...data}); renderTripContent(); return; }
-  await addDoc(itemsCol(),{...data,createdAt:serverTimestamp()});
-  recalcTotals();
-}
-
-async function doMoveToWatchlist(iid){
-  const item=S.items.find(i=>i.id===iid); if(!item) return;
-  haptic('medium');
-  const wlData={name:item.name,category:item.category||'',qty:item.qty||1,unit:item.unit||'ea',priceType:item.priceType||'each',price:item.price||0,saleDiscount:item.saleDiscount||0,saleExpiry:item.saleExpiry||null,notes:item.notes||'',isWatchlist:true,isRegular:item.isRegular||false,checked:false};
-  if(DEV){
-    S.items=S.items.filter(i=>i.id!==iid);
-    S.watchlistItems.push({id:'dev-wl-'+Date.now(),...wlData,isStoreWl:true});
-    renderTripContent(); return;
-  }
-  await addDoc(collection(db,`households/${S.householdId}/stores/${S.store.id}/watchlist`),{...wlData,createdAt:serverTimestamp()});
-  await deleteDoc(doc(db,`households/${S.householdId}/trips/${S.trip.id}/items/${iid}`));
-  recalcTotals();
-}
-    } else if(cx>65){
+      } else if(cx>65){
       haptic('medium');
       row.style.transform='translateX(110%)';
       setTimeout(()=>{
@@ -2090,6 +2015,6 @@ function closeSheets(){
 }
 function bindOverlayClose(){ qAll('.overlay').forEach(el=>el.addEventListener('click',e=>{ if(e.target===el) closeSheets(); })); }
 
-if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
+if('serviceWorker' in navigator) navigator.serviceWorker.register('/hallarc/sw.js').catch(()=>{});
 try { screen.orientation?.lock?.('portrait').catch(()=>{}); } catch(_){}
 render();
