@@ -1412,17 +1412,7 @@ async function doAddRegulars(){
 }
 
 
-  _scanActive=true; _scanResult=null;
-  openSheet('scanner-sheet');
-  const status=q('scan-status'),resultEl=q('scan-result'),useBtn=q('scan-use-btn'),retryBtn=q('scan-retry-btn');
-  if(resultEl) resultEl.style.display='none';
-  if(useBtn)   useBtn.style.display='none';
-  if(retryBtn) retryBtn.style.display='none';
-  if(status)   status.textContent='Starting camera…';
-  
-
-
-
+ 
 
 // ─── Editor bindings ─────────────────────────
 let _sale=false, _wl=false, _reg=false, _wt='per_lb';
