@@ -658,6 +658,8 @@ function renderEditor() {
   const isWeight = item.priceType==='per_lb'||item.priceType==='per_kg';
   const eachPriceVal = (!isWeight&&(item.price||0)>0) ? item.price : '';
   const wPriceVal    = (isWeight&&(item.price||0)>0) ? item.price : '';
+  const wQtyVal      = isWeight ? (item.qty||1) : '';
+  const eachQtyVal   = !isWeight ? (item.qty||1) : 1;
   const wType        = item.priceType==='per_kg' ? 'per_kg' : 'per_lb';
 
   return `
@@ -680,30 +682,30 @@ function renderEditor() {
   <div class="frow">
     <div class="fg"><label class="fg-label">Price per item</label>
       <input class="finput" id="e-price" type="number" value="${eachPriceVal}" min="0" step="0.01" placeholder="0.00"></div>
-    <div class="fg" style="max-width:110px"><label class="fg-label" id="e-qty-label">Quantity</label>
-      <input class="finput" id="e-qty" type="number" value="${item.qty||1}" min="0.01" step="0.01" onfocus="this.select()" style="text-align:center"></div>
-  </div>
-  <div class="frow">
-    <div class="fg"><label class="fg-label">Pack size</label>
-      <input class="finput" id="e-packsize" type="text" value="${esc(item.packSize||'')}" placeholder="e.g. 500 ml, 1.5 kg, 12 ct" autocorrect="off"></div>
-    <div class="fg" style="max-width:110px"><label class="fg-label">Unit</label>
-      <select class="finput" id="e-unit">
-        ${['ea','pkg','box','can','bottle','bunch','bag','L','ml','oz'].map(u=>`<option${item.unit===u?' selected':''}>${u}</option>`).join('')}
-      </select>
-    </div>
+    <div class="fg" style="max-width:110px"><label class="fg-label">Quantity</label>
+      <input class="finput" id="e-qty" type="number" value="${eachQtyVal}" min="1" step="1" onfocus="this.select()" style="text-align:center"></div>
   </div>
 
-  <div class="fg">
-    <label class="fg-label">Weight price <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;color:var(--text-muted)">(optional — if sold by weight)</span></label>
-    <div style="display:flex;gap:8px;align-items:center">
-      <input class="finput" id="e-wprice" type="number" value="${wPriceVal}" min="0" step="0.01" placeholder="0.00" style="flex:1">
-      <div class="pt-toggle" style="width:96px;flex-shrink:0">
+  <div class="fg" style="margin-bottom:14px"><label class="fg-label">Pack size</label>
+    <input class="finput" id="e-packsize" type="text" value="${esc(item.packSize||'')}" placeholder="e.g. 906 g, 1.5 kg, 12 ct" autocorrect="off"></div>
+
+  <div class="price-divider"></div>
+
+  <div class="fg" style="margin-top:14px"><label class="fg-label">Price per weight</label>
+    <input class="finput" id="e-wprice" type="number" value="${wPriceVal}" min="0" step="0.01" placeholder="0.00"></div>
+
+  <div class="frow">
+    <div class="fg"><label class="fg-label" id="e-wqty-label">Weight (lb)</label>
+      <input class="finput" id="e-wqty" type="number" value="${wQtyVal}" min="0" step="0.1" onfocus="this.select()" placeholder="0.0" style="text-align:center"></div>
+    <div class="fg" style="max-width:110px;padding-top:0">
+      <label class="fg-label">Unit</label>
+      <div class="pt-toggle" style="margin-top:6px">
         <button class="wt-btn${wType==='per_lb'?' sel':''}" data-pt="per_lb">lb</button>
         <button class="wt-btn${wType==='per_kg'?' sel':''}" data-pt="per_kg">kg</button>
       </div>
     </div>
-    <div class="w-equiv" id="e-w-equiv"></div>
   </div>
+  <div class="w-equiv" id="e-w-equiv" style="padding:0 16px 4px"></div>
 
   <div class="tog-row" style="margin-top:6px">
     <div class="tog-info"><div class="tog-lbl">On Sale</div><div class="tog-sub">Add a discount</div></div>
@@ -722,7 +724,7 @@ function renderEditor() {
     <input class="finput" id="e-notes" type="text" value="${esc(item.notes||'')}" placeholder="Any details…"></div>
 
   <div class="fg" style="margin-top:2px">
-    <label class="fg-label">Photo <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;color:var(--text-muted)">(optional — visual reference)</span></label>
+    <label class="fg-label">Photo <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;color:var(--text-muted)">(optional)</span></label>
     <input type="file" accept="image/*" id="e-photo-input" style="display:none">
     <div id="e-photo-preview" style="${item.photoData?'':'display:none'}">
       <div class="editor-photo-wrap">
@@ -745,7 +747,6 @@ function renderEditor() {
   <button class="btn-main" id="e-save">${S.editorMode==='add'?'Add to List':'Save Changes'}</button>
   <div style="height:8px"></div>`;
 }
-
 // ─── History screen ───────────────────────────
 function renderHistory() {
   const trips=S.histTrips.slice().sort((a,b)=>(b.completedAt?.seconds||b.createdAt?.seconds||0)-(a.completedAt?.seconds||a.createdAt?.seconds||0));
@@ -1447,10 +1448,17 @@ function bindEditor(){
   });
   on('editor-sheet','click',e=>{ if(e.target.id==='editor-sheet') closeSheets(); });
 
+  qAll('.wt-btn').forEach(b=>b.addEventListener('click',()=>{
+    qAll('.wt-btn').forEach(x=>x.classList.remove('sel'));
+    b.classList.add('sel'); _wt=b.dataset.pt; haptic('light');
+    updateWeightEquiv();
+  }));
 
-  qAll('.wt-btn').forEach(b=>b.addEventListener('click',()=>{ qAll('.wt-btn').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); _wt=b.dataset.pt; haptic('light'); updateWeightEquiv(); }));
   const wPriceInp=q('e-wprice');
-  if(wPriceInp){ wPriceInp.addEventListener('input',updateWeightEquiv); updateWeightEquiv(); }
+  const wQtyInp=q('e-wqty');
+  if(wPriceInp){ wPriceInp.addEventListener('input',updateWeightEquiv); }
+  if(wQtyInp){  wQtyInp.addEventListener('input',updateWeightEquiv); }
+  updateWeightEquiv();
 
   document.querySelectorAll('#editor-inner .finput').forEach(inp=>{
     inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); doSaveItem(); } });
@@ -1459,40 +1467,41 @@ function bindEditor(){
 
 function updateWeightEquiv(){
   const el=q('e-w-equiv'); if(!el) return;
-  const val=parseFloat(q('e-wprice')?.value)||0;
-  const lbl=q('e-qty-label');
-  if(val<=0){
+  const price=parseFloat(q('e-wprice')?.value)||0;
+  const lbl=q('e-wqty-label');
+  if(price<=0){
     el.textContent='';
-    if(lbl) lbl.textContent='Quantity';
+    if(lbl) lbl.textContent='Weight (lb)';
     return;
   }
   if(_wt==='per_lb'){
-    el.textContent=`$${val.toFixed(2)}/lb = $${(val/0.453592).toFixed(2)}/kg`;
+    el.textContent=`$${price.toFixed(2)}/lb = $${(price/0.453592).toFixed(2)}/kg`;
     if(lbl) lbl.textContent='Weight (lb)';
   } else {
-    el.textContent=`$${val.toFixed(2)}/kg = $${(val*0.453592).toFixed(2)}/lb`;
+    el.textContent=`$${price.toFixed(2)}/kg = $${(price*0.453592).toFixed(2)}/lb`;
     if(lbl) lbl.textContent='Weight (kg)';
   }
 }
 
 async function doSaveItem(){
   const name=q('e-name')?.value.trim(); if(!name) return;
-  const qty=parseFloat(q('e-qty')?.value)||1;
-  const unit=q('e-unit')?.value||'ea';
   const cat=q('e-cat')?.value||'';
   const packSize=q('e-packsize')?.value.trim()||'';
   const notes=q('e-notes')?.value.trim()||'';
 
   const eachPrice=parseFloat(q('e-price')?.value)||0;
+  const eachQty=parseFloat(q('e-qty')?.value)||1;
   const wPrice=parseFloat(q('e-wprice')?.value)||0;
-  let finalPrice=0, finalPriceType='each';
-  if(wPrice>0){ finalPrice=wPrice; finalPriceType=_wt; }
-  else { finalPrice=eachPrice; finalPriceType='each'; }
+  const wQty=parseFloat(q('e-wqty')?.value)||1;
+
+  let finalPrice=0, finalPriceType='each', finalQty=1;
+  if(wPrice>0){ finalPrice=wPrice; finalPriceType=_wt; finalQty=wQty; }
+  else { finalPrice=eachPrice; finalPriceType='each'; finalQty=eachQty; }
 
   const disc=_sale?(parseFloat(q('e-disc')?.value)||0):0;
   const exp=_sale?(q('e-exp')?.value||null):null;
   const photoData=S.editorItem?.photoData||null;
-  const baseData={name,category:cat,qty,unit,packSize,priceType:finalPriceType,price:finalPrice,saleDiscount:disc,saleExpiry:exp,notes,isRegular:_reg,photoData};
+  const baseData={name,category:cat,qty:finalQty,unit:'ea',packSize,priceType:finalPriceType,price:finalPrice,saleDiscount:disc,saleExpiry:exp,notes,isRegular:_reg,photoData};
   haptic('medium');
 
   const isStoreWl=S.editorItem?.isStoreWl||false;

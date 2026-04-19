@@ -116,8 +116,8 @@ body{display:flex;justify-content:center;background:var(--bg)}
 .cat-items-wrap{background:var(--bg-card);border-radius:0;margin:0;overflow:hidden;box-shadow:none;border-top:.5px solid #d1d1d6}
 
 /* ─── Item rows ─── */
-.item-wrap{position:relative;overflow:hidden;border-bottom:.5px solid #d1d1d6}
-.item-wrap:last-child{border-bottom:none}
+.item-wrap{position:relative;overflow:hidden}
+.item-wrap+.item-wrap{border-top:.5px solid var(--border-mid)}
 .item-reveal{position:absolute;inset:0;display:flex;align-items:stretch;pointer-events:none;z-index:0}
 .item-reveal-left{background:var(--accent);color:white;display:flex;align-items:center;padding-left:18px;gap:6px;font-size:13px;font-weight:500;flex:0 0 50%}
 .item-reveal-right{background:var(--danger);color:white;display:flex;align-items:center;justify-content:flex-end;padding-right:18px;gap:6px;font-size:13px;font-weight:500;flex:0 0 50%;margin-left:auto}
@@ -337,7 +337,25 @@ body{display:flex;justify-content:center;background:var(--bg)}
 .te-warn{font-size:12px;color:var(--warning);padding:6px 16px 2px;display:none}
 
 /* ─── Weight equiv hint ─── */
-.w-equiv{font-size:12px;color:var(--text-secondary);margin-top:5px;padding-left:2px;min-height:18px}
+const name=q('e-name')?.value.trim(); if(!name) return;
+  const cat=q('e-cat')?.value||'';
+  const packSize=q('e-packsize')?.value.trim()||'';
+  const notes=q('e-notes')?.value.trim()||'';
+
+  const eachPrice=parseFloat(q('e-price')?.value)||0;
+  const eachQty=parseFloat(q('e-qty')?.value)||1;
+  const wPrice=parseFloat(q('e-wprice')?.value)||0;
+  const wQty=parseFloat(q('e-wqty')?.value)||1;
+
+  let finalPrice=0, finalPriceType='each', finalQty=1;
+  if(wPrice>0){ finalPrice=wPrice; finalPriceType=_wt; finalQty=wQty; }
+  else { finalPrice=eachPrice; finalPriceType='each'; finalQty=eachQty; }
+
+  const disc=_sale?(parseFloat(q('e-disc')?.value)||0):0;.w-equiv{font-size:12px;color:var(--text-secondary);margin-top:5px;padding-left:2px;min-height:18px}
+.price-divider{height:.5px;background:var(--border-mid);margin:4px 16px 0}
+  const exp=_sale?(q('e-exp')?.value||null):null;
+  const photoData=S.editorItem?.photoData||null;
+  const baseData={name,category:cat,qty:finalQty,unit:'ea',packSize,priceType:finalPriceType,price:finalPrice,saleDiscount:disc,saleExpiry:exp,notes,isRegular:_reg,photoData};
 /* ─── Item photo ─── */
 .editor-photo-wrap{position:relative;margin-top:4px}
 .editor-photo-preview{width:60%;max-width:220px;aspect-ratio:3/4;object-fit:cover;border-radius:var(--r-sm);display:block;margin:0 auto}
