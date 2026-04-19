@@ -667,6 +667,7 @@ function renderEditor() {
   <div class="sheet-hdr-row">
     <div style="flex:1;font-size:17px;font-weight:600">${S.editorMode==='add'?'Add item':'Edit item'}</div>
     ${S.editorMode==='edit'?`<button class="ico-btn" id="e-del" style="color:var(--danger);font-size:16px">🗑 Delete</button>`:''}
+  <button class="ico-btn" id="e-save-top" style="color:var(--accent);font-weight:700;font-size:15px;width:auto;padding:0 8px">Save</button>
   </div>
 
   <div class="fg"><label class="fg-label">Item name</label>
@@ -1426,6 +1427,7 @@ function bindEditor(){
   _reg=S.editorItem?.isRegular||false;
   _wt=(S.editorItem?.priceType==='per_kg')?'per_kg':'per_lb';
 
+  on('e-save-top','click',doSaveItem);
   on('sale-tog','click',()=>{ _sale=!_sale; q('sale-tog').classList.toggle('on',_sale); const sf=q('sale-fields'); if(sf) sf.style.display=_sale?'block':'none'; haptic('light'); });
   on('wl-tog','click',()=>{ _wl=!_wl; q('wl-tog').classList.toggle('on',_wl); haptic('light'); });
   on('reg-tog','click',()=>{ _reg=!_reg; q('reg-tog').classList.toggle('on',_reg); haptic('light'); });
@@ -1463,7 +1465,7 @@ function bindEditor(){
   updateWeightEquiv();
 
   document.querySelectorAll('#editor-inner .finput').forEach(inp=>{
-    inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); doSaveItem(); } });
+    inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); inp.blur(); } });
   });
 }
 
@@ -1485,8 +1487,11 @@ function updateWeightEquiv(){
   }
 }
 
+let _saving=false;
 async function doSaveItem(){
-  const name=q('e-name')?.value.trim(); if(!name) return;
+  if(_saving) return; _saving=true;
+  document.activeElement?.blur();
+  const name=q('e-name')?.value.trim(); if(!name){ _saving=false; return; }
   const cat=q('e-cat')?.value||'';
   const packSize=q('e-packsize')?.value.trim()||'';
   const notes=q('e-notes')?.value.trim()||'';
@@ -1558,7 +1563,7 @@ async function doSaveItem(){
     }
     recalcTotals();
   }
-  closeSheets();
+  closeSheets(); _saving=false;
 }
 
 async function doDeleteItem(){
