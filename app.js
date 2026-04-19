@@ -686,12 +686,14 @@ function renderEditor() {
       <input class="finput" id="e-qty" type="number" value="${eachQtyVal}" min="1" step="1" onfocus="this.select()" style="text-align:center"></div>
   </div>
 
-  <div class="fg" style="margin-bottom:14px"><label class="fg-label">Pack size</label>
+  <div class="fg"><label class="fg-label">Pack size</label>
     <input class="finput" id="e-packsize" type="text" value="${esc(item.packSize||'')}" placeholder="e.g. 906 g, 1.5 kg, 12 ct" autocorrect="off"></div>
 
-  <div class="price-divider"></div>
+  <div style="margin:18px 16px 0;border-top:1.5px solid var(--border-mid);position:relative">
+    <span style="position:absolute;top:-9px;left:12px;background:var(--bg-card);padding:0 6px;font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted)">or by weight</span>
+  </div>
 
-  <div class="fg" style="margin-top:14px"><label class="fg-label">Price per weight</label>
+  <div class="fg" style="margin-top:18px"><label class="fg-label">Price per weight</label>
     <input class="finput" id="e-wprice" type="number" value="${wPriceVal}" min="0" step="0.01" placeholder="0.00"></div>
 
   <div class="frow">
