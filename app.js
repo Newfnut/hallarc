@@ -667,7 +667,7 @@ function renderEditor() {
   <div class="sheet-hdr-row">
     <div style="flex:1;font-size:17px;font-weight:600">${S.editorMode==='add'?'Add item':'Edit item'}</div>
     ${S.editorMode==='edit'?`<button class="ico-btn" id="e-del" style="color:var(--danger);font-size:16px">🗑 Delete</button>`:''}
-  <button class="ico-btn" id="e-save-top" style="color:var(--accent);font-weight:700;font-size:15px;width:auto;padding:0 8px">Save</button>
+  <button class="ico-btn" id="e-save-top" style="color:var(--accent);font-size:20px" title="Save">💾</button>
   </div>
 
   <div class="fg"><label class="fg-label">Item name</label>
