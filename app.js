@@ -1419,22 +1419,7 @@ async function doAddRegulars(){
   if(useBtn)   useBtn.style.display='none';
   if(retryBtn) retryBtn.style.display='none';
   if(status)   status.textContent='Starting camera…';
-  try {
-    if(!window.ZXing){
-      await new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js'; s.onload=res; s.onerror=()=>rej(new Error('Could not load barcode library')); document.head.appendChild(s); });
-    }
-    const hints=new Map();
-    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[ZXing.BarcodeFormat.EAN_13,ZXing.BarcodeFormat.EAN_8,ZXing.BarcodeFormat.UPC_A,ZXing.BarcodeFormat.UPC_E,ZXing.BarcodeFormat.CODE_128,ZXing.BarcodeFormat.QR_CODE]);
-    _scanReader=new ZXing.BrowserMultiFormatReader(hints,400);
-    const video=q('scan-video'); if(!video) return;
-    if(status) status.textContent='Point camera at a barcode';
-    await _scanReader.decodeFromConstraints({video:{facingMode:{ideal:'environment'}}},video,async(result,err)=>{
-      if(result&&_scanActive){ _scanActive=false; _scanReader?.reset(); haptic('medium'); await doScanResult(result.getText()); }
-    });
-  } catch(e){
-    if(status) status.textContent=e.name==='NotAllowedError'?'📵 Camera access denied — allow camera in Settings and try again':`⚠️ ${e.message||'Camera unavailable'}`;
-    if(retryBtn) retryBtn.style.display='block';
-  }
+  
 
 
 
