@@ -31,7 +31,8 @@ button{font-family:var(--font);cursor:pointer;-webkit-tap-highlight-color:transp
 input,select{font-family:var(--font);-webkit-appearance:none;appearance:none}
 ::-webkit-scrollbar{width:0;height:0}
 
-#app{height:100%;max-width:430px;margin:0 auto;position:relative;overflow:hidden;background:var(--bg)}
+#app{height:100%;width:100%;max-width:430px;margin:0 auto;position:relative;overflow:hidden;background:var(--bg)}
+body{display:flex;justify-content:center;background:var(--bg)}
 
 /* ─── Screens ─── */
 .screen{position:absolute;inset:0;display:flex;flex-direction:column;background:var(--bg);overflow:hidden;transition:transform .3s cubic-bezier(.4,0,.2,1)}
@@ -112,7 +113,7 @@ input,select{font-family:var(--font);-webkit-appearance:none;appearance:none}
 .cat-watchlist .cat-label{color:var(--text-muted)!important;opacity:.7}
 .cat-watchlist .cat-badge{background:var(--bg-secondary)!important;color:var(--text-muted)!important;opacity:.7}
 .cat-watchlist .cat-chev{color:var(--text-muted)!important;opacity:.7}
-.cat-items-wrap{background:var(--bg-card);border-radius:var(--r);margin:0 12px 4px;overflow:hidden;box-shadow:var(--shadow)}
+.cat-items-wrap{background:var(--bg-card);border-radius:0;margin:0;overflow:hidden;box-shadow:none}
 
 /* ─── Item rows ─── */
 .item-wrap{position:relative;overflow:hidden}
@@ -131,7 +132,7 @@ input,select{font-family:var(--font);-webkit-appearance:none;appearance:none}
 .irr-del.hi{opacity:1}
 .irr-move{background:#7c3aed;opacity:.35}
 .irr-move.hi{opacity:1}
-.item-row{display:flex;align-items:center;gap:10px;padding:11px 13px;background:var(--bg-card);border-bottom:.5px solid var(--border);position:relative;z-index:1;will-change:transform;min-height:54px;-webkit-tap-highlight-color:transparent}
+.item-row{display:flex;align-items:center;gap:10px;padding:11px 16px;background:#ffffff;border-bottom:.5px solid var(--border);position:relative;z-index:1;will-change:transform;min-height:54px;-webkit-tap-highlight-color:transparent}
 .item-row:last-child{border-bottom:none}
 /* ─── FIX: dim watchlist items without making background transparent (which exposed reveal layer) ─── */
 .item-row.item-dim .item-circle,
