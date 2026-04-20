@@ -711,19 +711,23 @@ function renderEditor() {
   </div>
   <div class="w-equiv" id="e-w-equiv" style="padding:0 16px 4px"></div>
 
+  <div style="margin:18px 16px 0;border-top:1.5px solid var(--border-mid)"></div>
+
   <div class="tog-row" style="margin-top:6px">
     <div class="tog-info"><div class="tog-lbl">On Sale</div><div class="tog-sub">Add a discount</div></div>
     <div class="tog${(item.saleDiscount||0)>0?' on':''}" id="sale-tog"></div>
   </div>
   <div id="sale-fields" style="${(item.saleDiscount||0)>0?'':'display:none'}">
     <div class="frow">
-      <div class="fg"><label class="fg-label">Discount ($)</label>
-        <input class="finput" id="e-disc" type="number" value="${item.saleDiscount||''}" min="0" step="0.01" placeholder="0.00"></div>
+      <div class="fg">
+        <label class="fg-label" id="e-disc-label">${isWeight ? `Discount ($/`+wType.replace('per_','')+`)` : 'Discount ($)'}</label>
+        <input class="finput" id="e-disc" type="number" value="${item.saleDiscount||''}" min="0" step="0.01" placeholder="0.00">
+        <div class="sale-calc-hint" id="e-sale-hint" style="font-size:12px;color:var(--text-secondary);margin-top:5px;padding-left:2px;min-height:18px"></div>
+      </div>
       <div class="fg"><label class="fg-label">Sale ends</label>
         <input class="finput" id="e-exp" type="date" value="${item.saleExpiry||''}"></div>
     </div>
   </div>
-
   <div class="fg"><label class="fg-label">Notes</label>
     <input class="finput" id="e-notes" type="text" value="${esc(item.notes||'')}" placeholder="Any details…"></div>
 
@@ -1443,8 +1447,7 @@ function bindEditor(){
   _wt=(S.editorItem?.priceType==='per_kg')?'per_kg':'per_lb';
 
   on('e-save-top','click',doSaveItem);
-  on('sale-tog','click',()=>{ _sale=!_sale; q('sale-tog').classList.toggle('on',_sale); const sf=q('sale-fields'); if(sf) sf.style.display=_sale?'block':'none'; haptic('light'); });
-  on('wl-tog','click',()=>{ _wl=!_wl; q('wl-tog').classList.toggle('on',_wl); haptic('light'); });
+  on('sale-tog','click',()=>{ _sale=!_sale; q('sale-tog').classList.toggle('on',_sale); const sf=q('sale-fields'); if(sf) sf.style.display=_sale?'block':'none'; haptic('light'); updateDiscLabel(); updateSaleHint(); });  on('wl-tog','click',()=>{ _wl=!_wl; q('wl-tog').classList.toggle('on',_wl); haptic('light'); });
   on('reg-tog','click',()=>{ _reg=!_reg; q('reg-tog').classList.toggle('on',_reg); haptic('light'); });
   on('e-save','click',doSaveItem);
   on('e-del','click',doDeleteItem);
@@ -1470,15 +1473,19 @@ function bindEditor(){
   qAll('.wt-btn').forEach(b=>b.addEventListener('click',()=>{
     qAll('.wt-btn').forEach(x=>x.classList.remove('sel'));
     b.classList.add('sel'); _wt=b.dataset.pt; haptic('light');
-    updateWeightEquiv();
+    updateWeightEquiv(); updateDiscLabel(); updateSaleHint();
   }));
-
   const wPriceInp=q('e-wprice');
   const wQtyInp=q('e-wqty');
-  if(wPriceInp){ wPriceInp.addEventListener('input',updateWeightEquiv); }
-  if(wQtyInp){  wQtyInp.addEventListener('input',updateWeightEquiv); }
+  if(wPriceInp){ wPriceInp.addEventListener('input',()=>{ updateWeightEquiv(); updateSaleHint(); updateDiscLabel(); }); }
+  if(wQtyInp){  wQtyInp.addEventListener('input',()=>{ updateWeightEquiv(); updateSaleHint(); }); }
+  const ePriceInp=q('e-price');
+  if(ePriceInp){ ePriceInp.addEventListener('input',()=>{ updateSaleHint(); updateDiscLabel(); }); }
+  const eDiscInp=q('e-disc');
+  if(eDiscInp){ eDiscInp.addEventListener('input',updateSaleHint); }
   updateWeightEquiv();
-
+  updateSaleHint();
+  updateDiscLabel();
   document.querySelectorAll('#editor-inner .finput').forEach(inp=>{
     if(inp.tagName==='SELECT'||inp.type==='number'||inp.type==='date') return;
     inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); inp.blur(); doSaveItem(); } });
@@ -1503,6 +1510,43 @@ function updateWeightEquiv(){
   }
 }
 
+function updateDiscLabel(){
+  const lbl=q('e-disc-label'); if(!lbl) return;
+  const wPrice=parseFloat(q('e-wprice')?.value)||0;
+  const unit=_wt==='per_kg'?'kg':'lb';
+  lbl.textContent=wPrice>0 ? `Discount ($/`+unit+`)` : 'Discount ($)';
+}
+
+function updateSaleHint(){
+  const el=q('e-sale-hint'); if(!el) return;
+  const disc=parseFloat(q('e-disc')?.value)||0;
+  if(disc<=0){ el.textContent=''; el.style.color='var(--text-secondary)'; return; }
+
+  const eachPrice=parseFloat(q('e-price')?.value)||0;
+  const wPrice=parseFloat(q('e-wprice')?.value)||0;
+  const wQty=parseFloat(q('e-wqty')?.value)||1;
+  const unit=_wt==='per_kg'?'kg':'lb';
+
+  // Conflict: both fields have values
+  if(eachPrice>0 && wPrice>0){
+    el.textContent='⚠ Both price fields filled — weight price will be used. Clear "Price per item" if that\'s not intended.';
+    el.style.color='var(--warning)'; return;
+  }
+
+  if(wPrice>0){
+    const salePerUnit=Math.max(0,wPrice-disc);
+    const saleTotal=salePerUnit*wQty;
+    el.textContent=`$${wPrice.toFixed(2)}/${unit} − $${disc.toFixed(2)} = $${salePerUnit.toFixed(2)}/${unit}  ·  ${wQty} ${unit} = $${saleTotal.toFixed(2)}`;
+    el.style.color='var(--text-secondary)';
+  } else if(eachPrice>0){
+    const salePrice=Math.max(0,eachPrice-disc);
+    el.textContent=`$${eachPrice.toFixed(2)} − $${disc.toFixed(2)} = $${salePrice.toFixed(2)}`;
+    el.style.color=salePrice<=0?'var(--danger)':'var(--text-secondary)';
+  } else {
+    el.textContent='Enter a price above to see the sale total.';
+    el.style.color='var(--text-muted)';
+  }
+}
 let _saving=false;
 async function doSaveItem(){
   if(_saving) return; _saving=true;
@@ -1517,11 +1561,15 @@ async function doSaveItem(){
   const wPrice=parseFloat(q('e-wprice')?.value)||0;
   const wQty=parseFloat(q('e-wqty')?.value)||1;
 
+  // Conflict guard: if both filled, weight wins — this matches the hint shown in the editor
   let finalPrice=0, finalPriceType='each', finalQty=1;
   if(wPrice>0){ finalPrice=wPrice; finalPriceType=_wt; finalQty=wQty; }
   else { finalPrice=eachPrice; finalPriceType='each'; finalQty=eachQty; }
+  // Clamp discount so it never exceeds the unit price
+  const discRaw=_sale?(parseFloat(q('e-disc')?.value)||0):0;
+  const discClamped=Math.min(discRaw,finalPrice);
 
-  const disc=_sale?(parseFloat(q('e-disc')?.value)||0):0;
+  const disc=discClamped;
   const exp=_sale?(q('e-exp')?.value||null):null;
   const photoData=S.editorItem?.photoData||null;
   const baseData={name,category:cat,qty:finalQty,unit:'ea',packSize,priceType:finalPriceType,price:finalPrice,saleDiscount:disc,saleExpiry:exp,notes,isRegular:_reg,photoData};
