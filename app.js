@@ -1246,7 +1246,15 @@ async function doSaveStoreCategories(){
 
 // ─── Trip bindings ────────────────────────────
 function bindTrip(){
-  on('t-back','click',()=>{ haptic('light'); S.unsubs.forEach(u=>u()); S.unsubs=[]; S.items=[]; go('home'); });
+  on('t-back','click',()=>{
+  haptic('light');
+  S.unsubs.forEach(u=>u()); S.unsubs=[];
+  S.items=[]; S.trip=null; S.store=null;
+  const su=onSnapshot(fsQ(col('stores'),orderBy('sortOrder')),snap=>{ S.stores=snap.docs.map(d=>({id:d.id,...d.data()})); if(S.screen==='home') render(); });
+  const tu=onSnapshot(col('trips'),snap=>{ S.trips=snap.docs.map(d=>({id:d.id,...d.data()})); if(S.screen==='home') render(); });
+  S.unsubs.push(su,tu);
+  go('home');
+});
   on('t-theme','click',()=>{ setTheme(S.theme==='dark'?'light':'dark'); renderTripContent(); });
   on('t-complete','click',doCompleteTrip);
   on('t-regulars','click',openRegularsSheet);
@@ -1356,7 +1364,13 @@ async function doCompleteTrip(){
   haptic('medium');
   if(DEV){ S.unsubs.forEach(u=>u()); S.unsubs=[]; S.items=[]; go('home'); return; }
   await updateDoc(doc(db,`households/${S.householdId}/trips/${S.trip.id}`),{status:'complete',completedAt:serverTimestamp()});
-  S.unsubs.forEach(u=>u()); S.unsubs=[]; S.items=[]; go('home');
+  S.unsubs.forEach(u=>u()); S.unsubs=[];
+  S.items=[]; S.trip=null; S.store=null;
+  // Re-attach household listeners so Home screen is live again
+  const su=onSnapshot(fsQ(col('stores'),orderBy('sortOrder')),snap=>{ S.stores=snap.docs.map(d=>({id:d.id,...d.data()})); if(S.screen==='home') render(); });
+  const tu=onSnapshot(col('trips'),snap=>{ S.trips=snap.docs.map(d=>({id:d.id,...d.data()})); if(S.screen==='home') render(); });
+  S.unsubs.push(su,tu);
+  go('home');
 }
 
 async function openRegularsSheet(){
@@ -1466,7 +1480,8 @@ function bindEditor(){
   updateWeightEquiv();
 
   document.querySelectorAll('#editor-inner .finput').forEach(inp=>{
-    inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); inp.blur(); } });
+    if(inp.tagName==='SELECT'||inp.type==='number'||inp.type==='date') return;
+    inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); inp.blur(); doSaveItem(); } });
   });
 }
 
