@@ -1547,11 +1547,11 @@ function updateSaleHint(){
     el.style.color='var(--text-muted)';
   }
 }
-let _saving=false;
 async function doSaveItem(){
   if(_saving) return; _saving=true;
   document.activeElement?.blur();
   const name=q('e-name')?.value.trim(); if(!name){ _saving=false; return; }
+  setTimeout(()=>{ _saving=false; }, 3000);
   const cat=q('e-cat')?.value||'';
   const packSize=q('e-packsize')?.value.trim()||'';
   const notes=q('e-notes')?.value.trim()||'';
@@ -1627,7 +1627,7 @@ async function doSaveItem(){
     }
     recalcTotals();
   }
-  closeSheets(); _saving=false;
+  _saving=false; closeSheets();
 }
 
 async function doDeleteItem(){
