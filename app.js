@@ -210,9 +210,9 @@ function renderAuth() {
   const m = S.authMode;
   return `
   <div class="screen" id="auth-screen">
-    <div class="auth-logo">🛒</div>
-    <div class="auth-title">Shopping List</div>
-    <div class="auth-sub">Your household shopping lists</div>
+    <img src="./newf-cart.png" class="auth-newf-logo" alt="">
+    <div class="auth-title">Haul & Paws</div>
+    <div class="auth-sub">Your household hauls, fetched fresh</div>
     <div class="auth-form">
       ${m==='join'?`
         <input class="auth-inp" id="a-code" type="text" placeholder="6-digit household code" maxlength="6" autocomplete="off" style="text-align:center;font-size:22px;letter-spacing:.18em">
@@ -247,8 +247,8 @@ function renderHome() {
   return `
   <div class="screen" id="home-screen">
     <div class="hdr">
-      <span style="font-size:22px">🛒</span>
-      <div class="hdr-title">Shopping List</div>
+      <img src="./newf-cart.png" class="newf-logo" alt="Newf">
+      <div class="hdr-title">Haul & Paws</div>
       <button class="ico-btn" id="h-history" title="Trip history" style="font-size:18px;position:relative">
         🕘
         ${(()=>{const c=S.trips.filter(t=>t.status==='complete').length;return c>0?`<span style="position:absolute;top:4px;right:4px;width:8px;height:8px;background:var(--accent);border-radius:50%;border:1.5px solid var(--header)"></span>`:''})()}
