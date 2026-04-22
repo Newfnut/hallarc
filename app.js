@@ -1151,6 +1151,7 @@ async function doDeleteHistTrip(){
 }
 // ─── Store / category template editor ─────────
 let _teStoreId=null, _teCats=[], _teDragIdx=null;
+let _saving=false;
 
 function openStoreEditor(storeId) {
   const store=S.stores.find(s=>s.id===storeId); if(!store) return;
@@ -1556,7 +1557,6 @@ async function doSaveItem(){
   try {
   document.activeElement?.blur();
   const name=q('e-name')?.value.trim(); if(!name){ _saving=false; return; }
-  setTimeout(()=>{ _saving=false; }, 3000);
   const cat=q('e-cat')?.value||'';
   const packSize=q('e-packsize')?.value.trim()||'';
   const notes=q('e-notes')?.value.trim()||'';
