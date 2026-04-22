@@ -1151,7 +1151,6 @@ async function doDeleteHistTrip(){
 }
 // ─── Store / category template editor ─────────
 let _teStoreId=null, _teCats=[], _teDragIdx=null;
-let _saving=false;
 
 function openStoreEditor(storeId) {
   const store=S.stores.find(s=>s.id===storeId); if(!store) return;
