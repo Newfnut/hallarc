@@ -1443,7 +1443,7 @@ async function doAddRegulars(){
  
 
 // ─── Editor bindings ─────────────────────────
-let _sale=false, _wl=false, _reg=false, _wt='per_lb';
+let _sale=false, _wl=false, _reg=false, _wt='per_lb', _saving=false;
 
 function bindEditor(){
   _sale=(S.editorItem?.saleDiscount||0)>0;
@@ -1628,7 +1628,7 @@ async function doSaveItem(){
     } else {
       if(DEV){ const idx=S.items.findIndex(i=>i.id===S.editorItem.id); if(idx>=0) S.items[idx]={...S.items[idx],...data}; _saving=false; closeSheets(); return; }
       await updateDoc(doc(db,`households/${S.householdId}/trips/${S.trip.id}/items/${S.editorItem.id}`),data);
-      if(_reg) updCache(name,cat,finalPrice,true,{qty,unit,packSize,priceType:finalPriceType,storeId:S.store?.id});
+      if(_reg) updCache(name,cat,finalPrice,true,{qty:finalQty,unit:'ea',packSize,priceType:finalPriceType,storeId:S.store?.id});
     }
     recalcTotals();
   }
