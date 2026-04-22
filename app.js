@@ -260,7 +260,6 @@ function renderHome() {
         </div>
       </div>
     </div>
-    </div>
     <div class="scroll" id="home-scroll">
       ${activeTrips.length?`
         <div class="sec-hdr">Active Trips</div>
@@ -1554,6 +1553,7 @@ function updateSaleHint(){
 }
 async function doSaveItem(){
   if(_saving) return; _saving=true;
+  try {
   document.activeElement?.blur();
   const name=q('e-name')?.value.trim(); if(!name){ _saving=false; return; }
   setTimeout(()=>{ _saving=false; }, 3000);
@@ -1622,17 +1622,18 @@ async function doSaveItem(){
     const data={...baseData,isWatchlist:false,checked:false};
     if(S.editorMode==='add'){
       data.sortOrder=Date.now();
-      if(DEV){ S.items.push({id:'dev-'+Date.now(),...data}); closeSheets(); return; }
+      if(DEV){ S.items.push({id:'dev-'+Date.now(),...data}); _saving=false; closeSheets(); return; }
       await addDoc(itemsCol(),{...data,createdAt:serverTimestamp()});
       updCache(name,cat,finalPrice,_reg,{qty:finalQty,unit:'ea',packSize,priceType:finalPriceType,storeId:S.store?.id});
     } else {
-      if(DEV){ const idx=S.items.findIndex(i=>i.id===S.editorItem.id); if(idx>=0) S.items[idx]={...S.items[idx],...data}; closeSheets(); return; }
+      if(DEV){ const idx=S.items.findIndex(i=>i.id===S.editorItem.id); if(idx>=0) S.items[idx]={...S.items[idx],...data}; _saving=false; closeSheets(); return; }
       await updateDoc(doc(db,`households/${S.householdId}/trips/${S.trip.id}/items/${S.editorItem.id}`),data);
       if(_reg) updCache(name,cat,finalPrice,true,{qty,unit,packSize,priceType:finalPriceType,storeId:S.store?.id});
     }
     recalcTotals();
   }
   _saving=false; closeSheets();
+  } catch(e){ console.error('Save failed',e); _saving=false; }
 }
 
 async function doDeleteItem(){
