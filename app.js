@@ -245,16 +245,18 @@ function renderHome() {
     });
 
   return `
-  <div class="screen" id="home-screen">
-    <div class="hdr">
-      <img src="./newf-cart.png" class="newf-logo" alt="Newf">
-      <div class="hdr-title">Haul & Paws</div>
-      <button class="ico-btn" id="h-history" title="Trip history" style="font-size:18px;position:relative">
-        🕘
-        ${(()=>{const c=S.trips.filter(t=>t.status==='complete').length;return c>0?`<span style="position:absolute;top:4px;right:4px;width:8px;height:8px;background:var(--accent);border-radius:50%;border:1.5px solid var(--header)"></span>`:''})()}
-      </button>
-      <button class="ico-btn" id="h-theme">${S.theme==='dark'?'☀️':'🌙'}</button>
-      <button class="ico-btn" id="h-user">👤</button>
+ <div class="screen" id="home-screen">
+    <div class="hdr hdr-banner">
+      <img src="./newf-cart.png" class="hdr-banner-img" alt="Haul and Paws">
+      <div class="hdr-banner-bar">
+        <div class="hdr-banner-title">Haul &amp; Paws 🐾</div>
+        <button class="ico-btn" id="h-history" title="Trip history" style="font-size:18px;position:relative">
+          🕘
+          ${(()=>{const c=S.trips.filter(t=>t.status==='complete').length;return c>0?`<span style="position:absolute;top:4px;right:4px;width:8px;height:8px;background:var(--accent);border-radius:50%;border:1.5px solid var(--header)"></span>`:''})()}
+        </button>
+        <button class="ico-btn" id="h-theme">${S.theme==='dark'?'☀️':'🌙'}</button>
+        <button class="ico-btn" id="h-user">👤</button>
+      </div>
     </div>
     <div class="scroll" id="home-scroll">
       ${activeTrips.length?`
