@@ -1621,7 +1621,7 @@ async function doSaveItem(){
       data.sortOrder=Date.now();
       if(DEV){ S.items.push({id:'dev-'+Date.now(),...data}); closeSheets(); return; }
       await addDoc(itemsCol(),{...data,createdAt:serverTimestamp()});
-      updCache(name,cat,finalPrice,_reg,{qty,unit,packSize,priceType:finalPriceType,storeId:S.store?.id});
+      updCache(name,cat,finalPrice,_reg,{qty:finalQty,unit:'ea',packSize,priceType:finalPriceType,storeId:S.store?.id});
     } else {
       if(DEV){ const idx=S.items.findIndex(i=>i.id===S.editorItem.id); if(idx>=0) S.items[idx]={...S.items[idx],...data}; closeSheets(); return; }
       await updateDoc(doc(db,`households/${S.householdId}/trips/${S.trip.id}/items/${S.editorItem.id}`),data);
