@@ -635,7 +635,7 @@ function rowHTML(item, dim=false, isStoreWl=false) {
       <div class="item-reveal-left">${isStoreWl?'＋ Add to trip':'✓ Check off'}</div>
       ${isStoreWl
         ?`<div class="item-reveal-right">Remove ✕</div>`
-        :`<div class="item-reveal-right irr-split"><div class="irr-del">🗑 Delete</div><div class="irr-move">↗ Move</div></div>`}
+        :`<div class="item-reveal-right irr-split"><div class="irr-del">↗ Move</div><div class="irr-move">🗑 Delete</div></div>`}
     </div>
     <div class="item-row${item.checked?' checked':''}${dim?' item-dim':''}" data-iid="${item.id}">
       <div class="item-circle"></div>
