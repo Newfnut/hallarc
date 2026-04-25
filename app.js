@@ -1553,9 +1553,9 @@ function updateSaleHint(){
 }
 async function doSaveItem(){
   if(_saving) return; _saving=true;
-  try {
   document.activeElement?.blur();
   const name=q('e-name')?.value.trim(); if(!name){ _saving=false; return; }
+  try {
   const cat=q('e-cat')?.value||'';
   const packSize=q('e-packsize')?.value.trim()||'';
   const notes=q('e-notes')?.value.trim()||'';
@@ -1631,8 +1631,8 @@ async function doSaveItem(){
     }
     recalcTotals();
   }
-  _saving=false; closeSheets();
-  } catch(e){ console.error('Save failed',e); _saving=false; }
+  } catch(e){ console.error('Save failed',e); }
+  finally { _saving=false; closeSheets(); }
 }
 
 async function doDeleteItem(){
