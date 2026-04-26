@@ -1371,6 +1371,14 @@ async function doCompleteTrip(){
   if(!confirm('Mark this trip as complete and archive it?')) return;
   haptic('medium');
   if(DEV){ S.unsubs.forEach(u=>u()); S.unsubs=[]; S.items=[]; go('home'); return; }
+  try {
+    const batch=writeBatch(db);
+    S.items.forEach(item=>{
+      const locked=effPrice(item);
+      batch.update(doc(db,`households/${S.householdId}/trips/${S.trip.id}/items/${item.id}`),{lockedPrice:locked});
+    });
+    await batch.commit();
+  } catch(e){ console.error('Price lock failed',e); }
   await updateDoc(doc(db,`households/${S.householdId}/trips/${S.trip.id}`),{status:'complete',completedAt:serverTimestamp()});
   S.unsubs.forEach(u=>u()); S.unsubs=[];
   S.items=[]; S.trip=null; S.store=null;
@@ -2056,7 +2064,7 @@ function fmtShort(d){ if(!d) return ''; return new Date(d+'T12:00:00').toLocaleD
 function storeIco(t){ return t==='warehouse'?'🏪':t==='supermarket'?'🛒':'🏬'; }
 function storeTypeLbl(t){ return t==='warehouse'?'Warehouse':t==='supermarket'?'Supermarket':'Custom'; }
 function storeIconHTML(store){ if(store?.icon) return `<span style="font-size:22px">${store.icon}</span>`; return `<img src="./store-icon.png" alt="">`; }
-function effPrice(item){ const b=item.price||0; if(!item.saleDiscount||!saleActive(item)) return b; return Math.max(0,b-item.saleDiscount); }
+function effPrice(item){ if(item.lockedPrice!=null) return item.lockedPrice; const b=item.price||0; if(!item.saleDiscount||!saleActive(item)) return b; return Math.max(0,b-item.saleDiscount); }
 function saleActive(item){ if(!item.saleExpiry) return(item.saleDiscount||0)>0; return new Date(item.saleExpiry+'T12:00:00')>=new Date(todayStr()+'T00:00:00'); }
 
 function openSheet(id){ const el=q(id); if(!el) return; el.style.display='flex'; requestAnimationFrame(()=>{ el.classList.add('open'); const sheet=el.querySelector('.sheet'); if(sheet) bindSheetDrag(sheet); }); }
