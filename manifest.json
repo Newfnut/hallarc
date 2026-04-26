@@ -3,6 +3,7 @@
   "short_name": "Shopping List",
   "description": "Household shopping lists",
   "start_url": "/hallarc/",
+"scope": "/hallarc/",
   "display": "standalone",
   "background_color": "#f2f2f7",
   "theme_color": "#16a34a",
