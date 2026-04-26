@@ -1850,7 +1850,7 @@ function openMoveToList(iid){
   openSheet('move-list-sheet');
 }
 
-.sheeasync function doMoveToList(targetTripId){
+async function doMoveToList(targetTripId){
   const item=S.contextItem; if(!item||!targetTripId) return;
   haptic('medium');
   const targetTrip=S.trips.find(t=>t.id===targetTripId);
