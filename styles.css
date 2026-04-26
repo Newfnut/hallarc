@@ -180,7 +180,7 @@ body{display:flex;justify-content:center;background:var(--bg)}
 /* ─── Modals ─── */
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:80;display:flex;align-items:flex-end;opacity:0;transition:opacity .25s;pointer-events:none}
 .overlay.open{opacity:1;pointer-events:all}
-.sheet{width:100%;max-width:430px;margin:0 auto;background:var(--bg-card);border-radius:20px 20px 0 0;padding-bottom:calc(24px + var(--safe-b));transform:translateY(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);max-height:92vh;overflow-y:auto}
+.sheet{width:100%;max-width:430px;margin:0 auto;background:var(--bg-card);border-radius:20px 20px 0 0;padding-bottom:calc(24px + var(--safe-b));transform:translateY(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);max-height:calc(92vh - env(safe-area-inset-top,0px));overflow-y:auto}
 .overlay.open .sheet{transform:translateY(0)}
 .sheet-handle{width:48px;height:5px;background:var(--border-mid);border-radius:3px;margin:12px auto 8px;cursor:grab;touch-action:none}
 .sheet-handle::before{content:'';position:absolute;left:50%;transform:translateX(-50%);width:80px;height:32px;top:-14px}

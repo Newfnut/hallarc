@@ -1500,7 +1500,7 @@ function bindEditor(){
   updateDiscLabel();
   document.querySelectorAll('#editor-inner .finput').forEach(inp=>{
     if(inp.tagName==='SELECT'||inp.type==='number'||inp.type==='date') return;
-    inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); inp.blur(); doSaveItem(); } });
+    inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); inp.blur(); setTimeout(()=>doSaveItem(),80); } });
   });
 }
 
