@@ -1850,10 +1850,27 @@ function openMoveToList(iid){
   openSheet('move-list-sheet');
 }
 
-async function doMoveToList(targetTripId){
+.sheeasync function doMoveToList(targetTripId){
   const item=S.contextItem; if(!item||!targetTripId) return;
   haptic('medium');
-  const newItem={name:item.name,category:null,qty:item.qty||1,unit:item.unit||'ea',priceType:'each',price:0,saleDiscount:0,saleExpiry:null,notes:'',isWatchlist:false,isRegular:item.isRegular||false,checked:false,sortOrder:Date.now()};
+  const targetTrip=S.trips.find(t=>t.id===targetTripId);
+  const sameStore=targetTrip&&targetTrip.storeId===S.trip.storeId;
+  const newItem={
+    name:item.name,
+    category:sameStore?(item.category||null):null,
+    qty:item.qty||1,
+    unit:item.unit||'ea',
+    priceType:item.priceType||'each',
+    price:item.price||0,
+    packSize:item.packSize||'',
+    saleDiscount:sameStore?(item.saleDiscount||0):0,
+    saleExpiry:sameStore?(item.saleExpiry||null):null,
+    notes:item.notes||'',
+    isWatchlist:false,
+    isRegular:item.isRegular||false,
+    checked:false,
+    sortOrder:Date.now()
+  };t{width:100%;max-width:430px;margin:0 auto;background:var(--bg-card);border-radius:20px 20px 0 0;padding-bottom:calc(24px + var(--safe-b));transform:translateY(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);max-height:calc(92vh - env(safe-area-inset-top,0px));overflow-y:auto}
   if(DEV){
     S.items=S.items.filter(i=>i.id!==item.id);
     closeSheets(); renderTripContent(); return;
