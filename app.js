@@ -169,6 +169,7 @@ const S = {
   regularsSelected: new Set(),
   dragId: null,
   histTrips: [],
+  settingsOpen: false,
   histDetailTrip: null,
   histDetailItems: [],
   watchlistItems: [],
@@ -251,12 +252,10 @@ function renderHome() {
       <div class="home-hero-overlay">
         <div class="home-hero-title">Haul &amp; Paws 🐾</div>
         <div class="home-hero-actions">
-          <button class="ico-btn home-hero-btn" id="h-history" title="Trip history" style="font-size:18px;position:relative">
-            🕘
+          <button class="ico-btn home-hero-btn" id="h-settings" title="Settings" style="font-size:20px;position:relative">
+            ⚙️
             ${(()=>{const c=S.trips.filter(t=>t.status==='complete').length;return c>0?`<span style="position:absolute;top:4px;right:4px;width:8px;height:8px;background:var(--accent);border-radius:50%;border:2px solid transparent"></span>`:''})()}
           </button>
-          <button class="ico-btn home-hero-btn" id="h-theme">${S.theme==='dark'?'☀️':'🌙'}</button>
-          <button class="ico-btn home-hero-btn" id="h-user">👤</button>
         </div>
       </div>
     </div>
@@ -336,11 +335,53 @@ function renderHome() {
     </div>
   </div>
 
-  <!-- User / household sheet -->
+  <!-- Settings sheet -->
+  <div class="overlay" id="settings-sheet">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">Settings</div>
+
+      <div class="settings-section-hdr">Appearance</div>
+      <div class="settings-row" id="s-theme-row">
+        <span class="settings-row-ic">${S.theme==='dark'?'☀️':'🌙'}</span>
+        <span class="settings-row-lbl">${S.theme==='dark'?'Switch to Light Mode':'Switch to Dark Mode'}</span>
+      </div>
+
+      <div class="settings-section-hdr">Trips</div>
+      <div class="settings-row" id="s-history-row" style="position:relative">
+        <span class="settings-row-ic">🕘</span>
+        <span class="settings-row-lbl">Trip History</span>
+        ${(()=>{const c=S.trips.filter(t=>t.status==='complete').length;return c>0?`<span class="settings-badge">${c}</span>`:''})()}
+      </div>
+
+      <div class="settings-section-hdr">Stores</div>
+      <div class="settings-row" id="s-add-store-row">
+        <span class="settings-row-ic">➕</span>
+        <span class="settings-row-lbl">Add a Store</span>
+      </div>
+
+      <div class="settings-section-hdr">Account</div>
+      <div class="settings-row" id="s-household-row">
+        <span class="settings-row-ic">🏠</span>
+        <span class="settings-row-lbl">Household &amp; Sharing</span>
+      </div>
+      <div class="settings-row settings-row-danger" id="s-signout-row">
+        <span class="settings-row-ic">🚪</span>
+        <span class="settings-row-lbl">Sign Out</span>
+      </div>
+
+      <div style="height:16px"></div>
+    </div>
+  </div>
+
+  <!-- Household sub-sheet (from settings) -->
   <div class="overlay" id="user-sheet">
     <div class="sheet">
       <div class="sheet-handle"></div>
-      <div class="sheet-title">Household</div>
+      <div class="sheet-hdr-row">
+        <button class="ico-btn" id="u-back" style="font-size:22px;color:var(--accent)">‹</button>
+        <div style="flex:1;font-size:17px;font-weight:600">Household &amp; Sharing</div>
+      </div>
       <div class="code-box">
         <div class="code-val">${(S.householdId||'').slice(-6).toUpperCase()}</div>
         <div class="code-hint">Share this code so your partner can join your lists</div>
@@ -885,10 +926,14 @@ let _newStoreColor='green';
 let _editStoreColor='green';
 
 function bindHome() {
-  on('h-theme','click',()=>{setTheme(S.theme==='dark'?'light':'dark');render();});
-  on('h-user','click',()=>openSheet('user-sheet'));
+  on('h-settings','click',()=>{haptic('light');openSheet('settings-sheet');});
+  on('s-theme-row','click',()=>{setTheme(S.theme==='dark'?'light':'dark');closeSheets();render();});
+  on('s-history-row','click',()=>{closeSheets();setTimeout(()=>goHistory(),320);});
+  on('s-add-store-row','click',()=>{closeSheets();setTimeout(()=>openSheet('store-sheet'),320);});
+  on('s-household-row','click',()=>{closeSheets();setTimeout(()=>openSheet('user-sheet'),320);});
+  on('s-signout-row','click',doSignOut);
+  on('u-back','click',()=>{closeSheets();setTimeout(()=>openSheet('settings-sheet'),320);});
   on('h-add-store','click',()=>openSheet('store-sheet'));
-  on('h-history','click',()=>{haptic('light');goHistory();});
   on('stores-toggle','click',()=>{
     const sec=q('stores-section'), chev=q('stores-chev');
     if(!sec) return;
