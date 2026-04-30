@@ -733,6 +733,9 @@ function renderEditor() {
       <input class="finput" id="e-qty" type="number" value="${eachQtyVal}" min="1" step="1" onfocus="this.select()" style="text-align:center"></div>
   </div>
 
+  <div class="fg"><label class="fg-label">Notes</label>
+    <input class="finput" id="e-notes" type="text" value="${esc(item.notes||'')}" placeholder="Any details…"></div>
+
   <div class="fg"><label class="fg-label">Pack size</label>
     <input class="finput" id="e-packsize" type="text" value="${esc(item.packSize||'')}" placeholder="e.g. 906 g, 1.5 kg, 12 ct" autocorrect="off"></div>
 
@@ -741,11 +744,11 @@ function renderEditor() {
   </div>
 
   <div class="fg" style="margin-top:18px"><label class="fg-label">Price per weight</label>
-    <input class="finput" id="e-wprice" type="number" value="${wPriceVal}" min="0" step="0.01" placeholder="0.00"></div>
+    <input class="finput" id="e-wprice" type="number" value="${wPriceVal}" min="0" step="0.01" placeholder="0.00" style="background:color-mix(in srgb,var(--accent-bg) 60%,var(--bg-input))"></div>
 
   <div class="frow">
     <div class="fg"><label class="fg-label" id="e-wqty-label">Weight (lb)</label>
-      <input class="finput" id="e-wqty" type="number" value="${wQtyVal}" min="0" step="0.1" onfocus="this.select()" placeholder="0.0" style="text-align:center"></div>
+      <input class="finput" id="e-wqty" type="number" value="${wQtyVal}" min="0" step="0.1" onfocus="this.select()" placeholder="0.0" style="text-align:center;background:color-mix(in srgb,var(--accent-bg) 60%,var(--bg-input))"></div>
     <div class="fg" style="max-width:110px;padding-top:0">
       <label class="fg-label">Unit</label>
       <div class="pt-toggle" style="margin-top:6px">
@@ -773,9 +776,6 @@ function renderEditor() {
         <input class="finput" id="e-exp" type="date" value="${item.saleExpiry||''}"></div>
     </div>
   </div>
-  <div class="fg"><label class="fg-label">Notes</label>
-    <input class="finput" id="e-notes" type="text" value="${esc(item.notes||'')}" placeholder="Any details…"></div>
-
   <div class="fg" style="margin-top:2px">
     <label class="fg-label">Photo <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;color:var(--text-muted)">(optional)</span></label>
     <input type="file" accept="image/*" id="e-photo-input" style="display:none">
