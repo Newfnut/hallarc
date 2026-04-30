@@ -716,85 +716,107 @@ function renderEditor() {
     <button class="ico-btn" id="e-save-top" style="color:var(--accent);font-size:20px">✅</button>
   </div>
 
-  <div class="fg"><label class="fg-label">Item name</label>
-    <input class="finput" id="e-name" type="text" value="${esc(item.name||'')}" placeholder="e.g. Bananas" autocorrect="off" autocapitalize="words"></div>
+  <div class="edr-rows">
 
-  <div class="fg"><label class="fg-label">Category</label>
-    <select class="finput" id="e-cat">
-      <option value="">— Uncategorized —</option>
-      ${cats.map(c=>`<option value="${esc(c)}"${item.category===c?' selected':''}>${c}</option>`).join('')}
-    </select>
-  </div>
+    <div class="edr-row">
+      <span class="edr-lbl">Name</span>
+      <input class="edr-inp" id="e-name" type="text" value="${esc(item.name||'')}" placeholder="e.g. Bananas" autocorrect="off" autocapitalize="words">
+    </div>
 
-  <div class="frow">
-    <div class="fg"><label class="fg-label">Price per item</label>
-      <input class="finput" id="e-price" type="number" value="${eachPriceVal}" min="0" step="0.01" placeholder="0.00"></div>
-    <div class="fg" style="max-width:110px"><label class="fg-label">Quantity</label>
-      <input class="finput" id="e-qty" type="number" value="${eachQtyVal}" min="1" step="1" onfocus="this.select()" style="text-align:center"></div>
-  </div>
-
-  <div class="fg"><label class="fg-label">Notes</label>
-    <input class="finput" id="e-notes" type="text" value="${esc(item.notes||'')}" placeholder="Any details…"></div>
-
-  <div class="fg"><label class="fg-label">Pack size</label>
-    <input class="finput" id="e-packsize" type="text" value="${esc(item.packSize||'')}" placeholder="e.g. 906 g, 1.5 kg, 12 ct" autocorrect="off"></div>
-
-  <div style="margin:18px 16px 0;border-top:1.5px solid var(--border-mid);position:relative">
-    <span style="position:absolute;top:-9px;left:12px;background:var(--bg-card);padding:0 6px;font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted)">or by weight</span>
-  </div>
-
-  <div class="fg" style="margin-top:18px"><label class="fg-label">Price per weight</label>
-    <input class="finput" id="e-wprice" type="number" value="${wPriceVal}" min="0" step="0.01" placeholder="0.00" style="background:color-mix(in srgb,var(--accent-bg) 60%,var(--bg-input))"></div>
-
-  <div class="frow">
-    <div class="fg"><label class="fg-label" id="e-wqty-label">Weight (lb)</label>
-      <input class="finput" id="e-wqty" type="number" value="${wQtyVal}" min="0" step="0.1" onfocus="this.select()" placeholder="0.0" style="text-align:center;background:color-mix(in srgb,var(--accent-bg) 60%,var(--bg-input))"></div>
-    <div class="fg" style="max-width:110px;padding-top:0">
-      <label class="fg-label">Unit</label>
-      <div class="pt-toggle" style="margin-top:6px">
-        <button class="wt-btn${wType==='per_lb'?' sel':''}" data-pt="per_lb">lb</button>
-        <button class="wt-btn${wType==='per_kg'?' sel':''}" data-pt="per_kg">kg</button>
+    <div class="edr-row">
+      <span class="edr-lbl">Price / item</span>
+      <div class="edr-pair">
+        <input class="edr-inp" id="e-price" type="number" value="${eachPriceVal}" min="0" step="0.01" placeholder="0.00">
+        <input class="edr-inp edr-qty" id="e-qty" type="number" value="${eachQtyVal}" min="1" step="1" onfocus="this.select()" style="text-align:center">
+        <span class="edr-unit-lbl">qty</span>
       </div>
     </div>
-  </div>
-  <div class="w-equiv" id="e-w-equiv" style="padding:0 16px 4px"></div>
 
-  <div style="margin:18px 16px 0;border-top:1.5px solid var(--border-mid)"></div>
-
-  <div class="tog-row" style="margin-top:6px">
-    <div class="tog-info"><div class="tog-lbl">On Sale</div><div class="tog-sub">Add a discount</div></div>
-    <div class="tog${(item.saleDiscount||0)>0?' on':''}" id="sale-tog"></div>
-  </div>
-  <div id="sale-fields" style="${(item.saleDiscount||0)>0?'':'display:none'}">
-    <div class="frow">
-      <div class="fg">
-        <label class="fg-label" id="e-disc-label">${isWeight ? `Discount ($/`+wType.replace('per_','')+`)` : 'Discount ($)'}</label>
-        <input class="finput" id="e-disc" type="number" value="${item.saleDiscount||''}" min="0" step="0.01" placeholder="0.00">
-        <div class="sale-calc-hint" id="e-sale-hint" style="font-size:12px;color:var(--text-secondary);margin-top:5px;padding-left:2px;min-height:18px"></div>
-      </div>
-      <div class="fg"><label class="fg-label">Sale ends</label>
-        <input class="finput" id="e-exp" type="date" value="${item.saleExpiry||''}"></div>
+    <div class="edr-row">
+      <span class="edr-lbl">Notes</span>
+      <input class="edr-inp" id="e-notes" type="text" value="${esc(item.notes||'')}" placeholder="Any details…">
     </div>
-  </div>
-  <div class="fg" style="margin-top:2px">
-    <label class="fg-label">Photo <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px;color:var(--text-muted)">(optional)</span></label>
-    <input type="file" accept="image/*" id="e-photo-input" style="display:none">
-    <div id="e-photo-preview" style="${item.photoData?'':'display:none'}">
-      <div class="editor-photo-wrap">
-        <img id="e-photo-img" src="${item.photoData||''}" class="editor-photo-preview" alt="">
-        <button type="button" id="e-photo-remove" class="editor-photo-remove">✕</button>
-      </div>
+
+    <div class="edr-row">
+      <span class="edr-lbl">Category</span>
+      <select class="edr-inp" id="e-cat">
+        <option value="">— Uncategorized —</option>
+        ${cats.map(c=>`<option value="${esc(c)}"${item.category===c?' selected':''}>${c}</option>`).join('')}
+      </select>
     </div>
-    <button type="button" id="e-photo-add-btn" class="editor-photo-add" style="${item.photoData?'display:none':''}">📷 Add photo</button>
+
+    <div class="edr-row">
+      <span class="edr-lbl">Pack size</span>
+      <input class="edr-inp" id="e-packsize" type="text" value="${esc(item.packSize||'')}" placeholder="e.g. 906 g, 1.5 kg, 12 ct" autocorrect="off">
+    </div>
+
   </div>
 
-  <div class="tog-row" style="margin-top:6px">
-    <div class="tog-info"><div class="tog-lbl">Regular Buy ⭐</div><div class="tog-sub">Quick re-add on future trips</div></div>
-    <div class="tog${item.isRegular?' on':''}" id="reg-tog"></div>
+  <div class="edr-divider"><span>or by weight</span></div>
+
+  <div class="edr-rows edr-rows-green">
+
+    <div class="edr-row">
+      <span class="edr-lbl">Price / weight</span>
+      <div class="edr-pair">
+        <input class="edr-inp edr-green" id="e-wprice" type="number" value="${wPriceVal}" min="0" step="0.01" placeholder="0.00">
+        <div class="edr-wt-toggle">
+          <button class="wt-btn${wType==='per_lb'?' sel':''}" data-pt="per_lb">lb</button>
+          <button class="wt-btn${wType==='per_kg'?' sel':''}" data-pt="per_kg">kg</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="edr-row">
+      <span class="edr-lbl" id="e-wqty-label">Weight</span>
+      <input class="edr-inp edr-green edr-qty" id="e-wqty" type="number" value="${wQtyVal}" min="0" step="0.1" onfocus="this.select()" placeholder="0.0" style="text-align:center">
+    </div>
+
   </div>
-  <div class="tog-row">
-    <div class="tog-info"><div class="tog-lbl">Watchlist</div><div class="tog-sub">Not urgent — excluded from total</div></div>
-    <div class="tog${item.isWatchlist?' on':''}" id="wl-tog"></div>
+  <div class="w-equiv" id="e-w-equiv" style="padding:4px 16px 8px"></div>
+
+  <div class="edr-rows" style="margin-top:8px">
+
+    <div class="edr-row edr-row-tog">
+      <span class="edr-lbl">On sale</span>
+      <div class="tog${(item.saleDiscount||0)>0?' on':''}" id="sale-tog"></div>
+    </div>
+    <div id="sale-fields" style="${(item.saleDiscount||0)>0?'':'display:none'}">
+      <div class="edr-row">
+        <span class="edr-lbl" id="e-disc-label">${isWeight ? `Discount ($/`+wType.replace('per_','')+`)` : 'Discount ($)'}</span>
+        <input class="edr-inp" id="e-disc" type="number" value="${item.saleDiscount||''}" min="0" step="0.01" placeholder="0.00">
+      </div>
+      <div class="edr-row">
+        <span class="edr-lbl">Sale ends</span>
+        <input class="edr-inp" id="e-exp" type="date" value="${item.saleExpiry||''}">
+      </div>
+      <div class="sale-calc-hint" id="e-sale-hint" style="font-size:12px;color:var(--text-secondary);padding:4px 16px 6px;min-height:18px"></div>
+    </div>
+
+    <div class="edr-row">
+      <span class="edr-lbl">Photo</span>
+      <div style="flex:1">
+        <input type="file" accept="image/*" id="e-photo-input" style="display:none">
+        <div id="e-photo-preview" style="${item.photoData?'':'display:none'}">
+          <div class="editor-photo-wrap">
+            <img id="e-photo-img" src="${item.photoData||''}" class="editor-photo-preview" alt="">
+            <button type="button" id="e-photo-remove" class="editor-photo-remove">✕</button>
+          </div>
+        </div>
+        <button type="button" id="e-photo-add-btn" class="editor-photo-add" style="${item.photoData?'display:none':''}">📷 Add photo</button>
+      </div>
+    </div>
+
+    <div class="edr-row edr-row-tog">
+      <span class="edr-lbl">Regular ⭐</span>
+      <div class="tog${item.isRegular?' on':''}" id="reg-tog"></div>
+    </div>
+
+    <div class="edr-row edr-row-tog">
+      <span class="edr-lbl">Watchlist</span>
+      <div class="tog${item.isWatchlist?' on':''}" id="wl-tog"></div>
+    </div>
+
   </div>
 
   <button class="btn-main" id="e-save">${S.editorMode==='add'?'Add to List':'Save Changes'}</button>
