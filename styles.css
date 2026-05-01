@@ -299,8 +299,8 @@ body{display:flex;justify-content:center;background:var(--bg)}
 .reg-check.on::after{content:'';width:5px;height:9px;border:2.5px solid white;border-top:none;border-left:none;transform:rotate(45deg) translate(-1px,-1px)}
 .reg-item-wrap{position:relative;overflow:hidden;border-bottom:.5px solid var(--border)}
 .reg-item-wrap:last-child{border-bottom:none}
-.reg-item-wrap .reg-item{border-bottom:none;position:relative;z-index:1;will-change:transform}
-.reg-item-reveal{position:absolute;inset:0;background:var(--danger);color:white;display:flex;align-items:center;justify-content:flex-end;padding-right:20px;font-size:14px;font-weight:700;z-index:0}
+.reg-item-wrap .reg-item{border-bottom:none;position:relative;z-index:1;will-change:transform;background:var(--bg-card)}
+.reg-item-reveal{position:absolute;top:0;right:0;bottom:0;width:130px;background:var(--danger);color:white;display:flex;align-items:center;justify-content:flex-end;padding-right:20px;font-size:14px;font-weight:700;z-index:0}
 
 /* ─── History screen ─── */
 .hist-card{background:var(--bg-card);border-radius:var(--r);margin:0 12px 10px;overflow:hidden;box-shadow:var(--shadow);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .1s}
