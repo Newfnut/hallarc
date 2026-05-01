@@ -1476,15 +1476,20 @@ async function openRegularsSheet(){
   }
   list.innerHTML=`<div style="background:var(--bg-card);border-radius:var(--r);margin:10px 12px 4px;overflow:hidden;box-shadow:var(--shadow)">`+
     regulars.map(r=>`
-      <div class="reg-item" data-rid="${esc(r.id)}" data-rname="${esc(r.name)}" data-rcat="${esc(r.category||'')}" data-rp="${r.lastPrice||0}" data-rq="${r.lastQty||1}" data-ru="${esc(r.lastUnit||'ea')}" data-rps="${esc(r.lastPackSize||'')}" data-rpt="${esc(r.lastPriceType||'each')}">
-        <div class="reg-check" id="rc-${r.id}"></div>
-        <div style="flex:1;min-width:0">
-          <div style="font-size:15px;font-weight:500">${r.name}</div>
-          ${r.category?`<div style="font-size:12px;color:var(--text-secondary)">${r.category}</div>`:''}
+      <div class="reg-item-wrap" data-rid="${esc(r.id)}">
+        <div class="reg-item-reveal">Delete ✕</div>
+        <div class="reg-item" data-rid="${esc(r.id)}" data-rname="${esc(r.name)}" data-rcat="${esc(r.category||'')}" data-rp="${r.lastPrice||0}" data-rq="${r.lastQty||1}" data-ru="${esc(r.lastUnit||'ea')}" data-rps="${esc(r.lastPackSize||'')}" data-rpt="${esc(r.lastPriceType||'each')}">
+          <div class="reg-check" id="rc-${r.id}"></div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:15px;font-weight:500">${r.name}</div>
+            ${r.category?`<div style="font-size:12px;color:var(--text-secondary)">${r.category}</div>`:''}
+          </div>
+          ${(r.lastPrice||0)>0?`<div style="font-size:13px;font-weight:600;color:var(--text-secondary)">$${r.lastPrice.toFixed(2)}</div>`:''}
         </div>
-        ${(r.lastPrice||0)>0?`<div style="font-size:13px;font-weight:600;color:var(--text-secondary)">$${r.lastPrice.toFixed(2)}</div>`:''}
       </div>`).join('')+`</div>`;
   list.querySelectorAll('.reg-item').forEach(el=>{
+    const wrap=el.closest('.reg-item-wrap');
+    // tap to select
     el.addEventListener('click',()=>{
       haptic('light');
       const rid=el.dataset.rid;
@@ -1494,6 +1499,8 @@ async function openRegularsSheet(){
       const n=S.regularsSelected.size;
       if(btn){ btn.textContent=n>0?`Add ${n} item${n>1?'s':''}…`:'Select items above'; btn.style.opacity=n>0?'1':'.5'; }
     });
+    // swipe left to delete
+    if(wrap) setupRegSwipe(wrap,el.dataset.rid,el.dataset.rname,btn,regulars);
   });
 }
 
@@ -1515,6 +1522,44 @@ async function doAddRegulars(){
 
 
  
+
+function setupRegSwipe(wrap,rid,rname,btn,regularsArr){
+  const row=wrap.querySelector('.reg-item');
+  let sx=0,cx=0,going=false;
+  const THRESH=65;
+  row.addEventListener('touchstart',e=>{ sx=e.touches[0].clientX; cx=0; going=true; row.style.transition='none'; },{passive:true});
+  row.addEventListener('touchmove',e=>{
+    if(!going) return;
+    const dx=e.touches[0].clientX-sx, dy=e.touches[0].clientY-(e.touches[0].clientY);
+    cx=Math.min(0,Math.max(-130,dx));
+    row.style.transform=`translateX(${cx}px)`;
+  },{passive:true});
+  row.addEventListener('touchend',()=>{
+    if(!going) return; going=false;
+    row.style.transition='transform .25s ease';
+    if(cx<-THRESH){
+      if(!confirm(`Remove "${rname}" from Regular Items?`)){ row.style.transform=''; return; }
+      haptic('heavy');
+      row.style.transform='translateX(-110%)';
+      setTimeout(async()=>{
+        wrap.remove();
+        const idx=regularsArr.findIndex(r=>r.id===rid);
+        if(idx>=0) regularsArr.splice(idx,1);
+        S.regularsSelected.delete(rid);
+        const n=S.regularsSelected.size;
+        if(btn){ btn.textContent=n>0?`Add ${n} item${n>1?'s':''}…`:'Select items above'; btn.style.opacity=n>0?'1':'.5'; }
+        if(DEV) return;
+        try {
+          const norm=(rname||'').toLowerCase();
+          const id=norm.replace(/[^a-z0-9]/g,'_').slice(0,80);
+          await updateDoc(doc(db,`households/${S.householdId}/itemCache/${id}`),{isRegular:false});
+        } catch(e){ console.error('Remove regular failed',e); }
+      },240);
+    } else {
+      row.style.transform='';
+    }
+  });
+}
 
 // ─── Editor bindings ─────────────────────────
 let _sale=false, _wl=false, _reg=false, _wt='per_lb', _saving=false;

@@ -297,6 +297,10 @@ body{display:flex;justify-content:center;background:var(--bg)}
 .reg-check{width:22px;height:22px;border-radius:50%;border:2px solid var(--border-mid);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .15s}
 .reg-check.on{background:var(--accent);border-color:var(--accent)}
 .reg-check.on::after{content:'';width:5px;height:9px;border:2.5px solid white;border-top:none;border-left:none;transform:rotate(45deg) translate(-1px,-1px)}
+.reg-item-wrap{position:relative;overflow:hidden;border-bottom:.5px solid var(--border)}
+.reg-item-wrap:last-child{border-bottom:none}
+.reg-item-wrap .reg-item{border-bottom:none;position:relative;z-index:1;will-change:transform}
+.reg-item-reveal{position:absolute;inset:0;background:var(--danger);color:white;display:flex;align-items:center;justify-content:flex-end;padding-right:20px;font-size:14px;font-weight:700;z-index:0}
 
 /* ─── History screen ─── */
 .hist-card{background:var(--bg-card);border-radius:var(--r);margin:0 12px 10px;overflow:hidden;box-shadow:var(--shadow);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .1s}
