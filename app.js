@@ -1738,7 +1738,8 @@ async function doSaveItem(){
     recalcTotals();
   } else {
     // ── Normal trip item save ──
-    const data={...baseData,isWatchlist:false,checked:false};
+    const preserveChecked = S.editorMode==='edit' ? (S.editorItem?.checked||false) : false;
+    const data={...baseData,isWatchlist:false,checked:preserveChecked};
     if(S.editorMode==='add'){
       data.sortOrder=Date.now();
       if(DEV){ S.items.push({id:'dev-'+Date.now(),...data}); _saving=false; closeSheets(); return; }
