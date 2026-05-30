@@ -982,6 +982,7 @@ function bindHome() {
   qAll('[data-sid]').forEach(el=>{
     let lpt=null, longFired=false;
     el.addEventListener('touchstart',()=>{ longFired=false; lpt=setTimeout(()=>{ longFired=true; lpt=null; haptic('heavy'); openStoreCtxMenu(el.dataset.sid); },600); },{passive:true});
+    el.addEventListener('contextmenu',e=>{ e.preventDefault(); longFired=true; openStoreCtxMenu(el.dataset.sid); });
     el.addEventListener('touchend',()=>clearTimeout(lpt));
     el.addEventListener('touchmove',()=>clearTimeout(lpt),{passive:true});
     el.addEventListener('click',()=>{
