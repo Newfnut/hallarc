@@ -96,6 +96,9 @@ body{display:flex;justify-content:center;background:var(--bg)}
 .trip-total{text-align:right;flex-shrink:0}
 .trip-amt{font-size:15px;font-weight:700;color:var(--accent)}
 .trip-lbl{font-size:11px;color:var(--text-muted)}
+.trip-row-next .trip-meta{color:var(--text-secondary)}
+.trip-row-next .trip-lbl{opacity:.75}
+.trip-row-next .trip-icon{background:rgba(255,255,255,.25);border-radius:10px}
 
 /* ─── Trip: add bar ─── */
 .add-bar{background:var(--bg-card);border-bottom:.5px solid var(--border);padding:8px 12px;display:flex;gap:8px;flex-shrink:0;position:relative;z-index:5}
