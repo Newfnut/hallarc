@@ -683,7 +683,7 @@ function rowHTML(item, dim=false, isStoreWl=false) {
       <div class="item-circle"></div>
       <div class="item-body">
         <div class="item-nm">${item.name}</div>
-         <div class="item-detail">${item.packSize||''}${item.notes?(item.packSize?' · ':'')+item.notes:''}</div>
+        ${isStoreWl&&item.category?`<div class="item-detail" style="color:var(--text-secondary);font-style:italic">${item.category}</div>`:`<div class="item-detail">${item.packSize||''}${item.notes?(item.packSize?' · ':'')+item.notes:''}</div>`}
         ${unitDual?`<div class="unit-both">${unitDual}</div>`:''}
         ${hasSale?`<div class="sale-tag${saleExpiringSoon?' expiring':''}">SALE −$${item.saleDiscount.toFixed(2)}${saleExpiryStr?` <span style="font-weight:400;opacity:.8">${saleExpiryStr}</span>`:''}</div>`:''}
     
@@ -1728,7 +1728,8 @@ async function doSaveItem(){
     }
   } else if(isStoreWl){
     // ── Promoting watchlist item to this trip (stays on watchlist) ──
-    const tripData={...baseData,isWatchlist:false,checked:false,sortOrder:Date.now()};
+    const wlCat=S.editorItem?.category||cat||null;
+    const tripData={...baseData,category:wlCat,isWatchlist:false,checked:false,sortOrder:Date.now()};
     const wlUpdate={...baseData,isWatchlist:true}; // keep watchlist copy current
     if(DEV){
       const idx=S.watchlistItems.findIndex(i=>i.id===S.editorItem.id);
