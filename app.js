@@ -1363,11 +1363,33 @@ async function doQuickAdd(){
   const val=inp.value.trim(); if(!val) return;
   inp.value=''; q('ac').style.display='none';
   haptic('medium');
-  const cat=guessCategory(val,S.store?.categories||[]);
-  const data={name:cap(val),category:cat,qty:1,unit:'ea',priceType:'each',price:0,saleDiscount:0,saleExpiry:null,notes:'',isWatchlist:false,checked:false,sortOrder:Date.now()};
+  const norm=val.toLowerCase();
+  let cached=null;
+  if(DEV){
+    const match=S.items.find(i=>i.name.toLowerCase()===norm);
+    if(match) cached={category:match.category,lastPrice:match.price||0,lastQty:match.qty||1,lastUnit:match.unit||'ea',lastPackSize:match.packSize||'',lastPriceType:match.priceType||'each',isRegular:match.isRegular||false};
+  } else {
+    try {
+      const id=norm.replace(/[^a-z0-9]/g,'_').slice(0,80);
+      const snap=await getDoc(doc(db,`households/${S.householdId}/itemCache/${id}`));
+      if(snap.exists()) cached=snap.data();
+    } catch(e){}
+  }
+  const cat=(cached?.category)||guessCategory(val,S.store?.categories||[]);
+  const data={
+    name:cap(val),
+    category:cat,
+    qty:cached?.lastQty||1,
+    unit:cached?.lastUnit||'ea',
+    priceType:cached?.lastPriceType||'each',
+    price:cached?.lastPrice||0,
+    packSize:cached?.lastPackSize||'',
+    saleDiscount:0,saleExpiry:null,notes:'',isWatchlist:false,isRegular:cached?.isRegular||false,checked:false,sortOrder:Date.now()
+  };
   if(DEV){ S.items.push({id:'dev-'+Date.now(),...data}); renderTripContent(); return; }
   await addDoc(itemsCol(),{...data,createdAt:serverTimestamp()});
-  updCache(cap(val),cat); recalcTotals();
+  updCache(cap(val),cat,data.price,data.isRegular,{qty:data.qty,unit:data.unit,packSize:data.packSize,priceType:data.priceType,storeId:S.store?.id});
+  recalcTotals();
 }
 
 async function doAC(){
@@ -1751,7 +1773,7 @@ async function doSaveItem(){
     } else {
       if(DEV){ const idx=S.items.findIndex(i=>i.id===S.editorItem.id); if(idx>=0) S.items[idx]={...S.items[idx],...data}; _saving=false; closeSheets(); return; }
       await updateDoc(doc(db,`households/${S.householdId}/trips/${S.trip.id}/items/${S.editorItem.id}`),data);
-      if(_reg) updCache(name,cat,finalPrice,true,{qty:finalQty,unit:'ea',packSize,priceType:finalPriceType,storeId:S.store?.id});
+      updCache(name,cat,finalPrice,_reg,{qty:finalQty,unit:'ea',packSize,priceType:finalPriceType,storeId:S.store?.id});
     }
     recalcTotals();
   }
