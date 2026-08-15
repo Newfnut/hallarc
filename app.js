@@ -2287,6 +2287,32 @@ function closeSheets(){
 }
 function bindOverlayClose(){ qAll('.overlay').forEach(el=>el.addEventListener('click',e=>{ if(e.target===el) closeSheets(); })); }
 
-if('serviceWorker' in navigator) navigator.serviceWorker.register('/hallarc/sw.js').catch(()=>{});
+function showUpdateToast(reg){
+  if(document.getElementById('update-toast')) return;
+  const el=document.createElement('div');
+  el.id='update-toast';
+  el.className='update-toast';
+  el.innerHTML=`<span>A new version is available</span><button id="update-toast-btn">Reload</button>`;
+  document.body.appendChild(el);
+  requestAnimationFrame(()=>el.classList.add('show'));
+  el.querySelector('#update-toast-btn').addEventListener('click',()=>{
+    reg.waiting?.postMessage('SKIP_WAITING');
+  });
+}
+
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('/hallarc/sw.js').then(reg=>{
+    reg.addEventListener('updatefound',()=>{
+      const nw=reg.installing; if(!nw) return;
+      nw.addEventListener('statechange',()=>{
+        if(nw.state==='installed' && navigator.serviceWorker.controller) showUpdateToast(reg);
+      });
+    });
+  }).catch(()=>{});
+  let _reloaded=false;
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{
+    if(_reloaded) return; _reloaded=true; location.reload();
+  });
+}
 try { screen.orientation?.lock?.('portrait').catch(()=>{}); } catch(_){}
 render();
