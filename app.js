@@ -173,6 +173,8 @@ const S = {
   histDetailTrip: null,
   histDetailItems: [],
   watchlistItems: [],
+  itemCacheAll: null,
+  itemCacheLoaded: false,
 };
 
 // ═══════════════════════════════════════════
@@ -1401,10 +1403,11 @@ async function doAC(){
     const seen=new Set();
     S.items.forEach(i=>{ const k=i.name.toLowerCase(); if(k.includes(lower)&&!seen.has(k)){ seen.add(k); res.push({name:i.name,category:i.category,lastPrice:i.price||0,lastQty:i.qty||1,lastUnit:i.unit||'ea',lastPackSize:i.packSize||'',lastPriceType:i.priceType||'each',lastStoreId:S.store?.id}); } });
   } else {
-    try {
-      const snap=await getDocs(fsQ(collection(db,`households/${S.householdId}/itemCache`),where('normalizedName','>=',lower),where('normalizedName','<=',lower+'\uf8ff'),limit(8)));
-      res=snap.docs.map(d=>d.data());
-    } catch(e){}
+    if(!S.itemCacheLoaded) await loadItemCache();
+    res=(S.itemCacheAll||[])
+      .filter(r=>r.normalizedName?.includes(lower))
+      .sort((a,b)=>(b.frequency||0)-(a.frequency||0))
+      .slice(0,8);
     if(res.length===0){
       drop.innerHTML=`<div class="ac-item" style="justify-content:center;color:var(--text-muted);font-size:13px"><div class="spin" style="width:16px;height:16px;border-width:2px;margin-right:8px;display:inline-block"></div>Searching food database…</div>`;
       drop.style.display='block';
@@ -2085,6 +2088,7 @@ async function loadTrip(tripId){
   S.trip={id:tripId,...snap.data()};
   S.store=S.stores.find(s=>s.id===S.trip.storeId)||{categories:[]};
   S.items=[]; go('trip');
+  if(!S.itemCacheLoaded) loadItemCache();
   const iu=onSnapshot(fsQ(collection(db,`households/${S.householdId}/trips/${tripId}/items`),orderBy('sortOrder')),snap=>{
     S.items=snap.docs.map(d=>({id:d.id,...d.data()}));
     if(S.screen==='trip') renderTripContent();
@@ -2116,6 +2120,39 @@ async function recalcTotals(){
   await updateDoc(doc(db,`households/${S.householdId}/trips/${S.trip.id}`),{totalActive:active,totalChecked:checked,itemCount:cnt});
 }
 
+async function loadItemCache(){
+  if(DEV||!S.householdId) return;
+  const cutoff=Date.now()-1000*60*60*24*30*4; // ~4 months
+  try {
+    const snap=await getDocs(collection(db,`households/${S.householdId}/itemCache`));
+    const all=snap.docs.map(d=>({id:d.id,...d.data()}));
+    S.itemCacheAll=all.filter(r=>{
+      if(r.isRegular) return true;
+      const t=r.lastUsed?.seconds?r.lastUsed.seconds*1000:0;
+      return t>=cutoff;
+    });
+    maybeCleanupItemCache(all,cutoff);
+  } catch(e){ S.itemCacheAll=[]; }
+  S.itemCacheLoaded=true;
+}
+
+async function maybeCleanupItemCache(all,cutoff){
+  const lastRun=+(localStorage.getItem('itemCacheCleanupAt')||0);
+  if(Date.now()-lastRun<1000*60*60*24*7) return; // throttle: once per 7 days
+  const stale=all.filter(r=>{
+    if(r.isRegular) return false;
+    const t=r.lastUsed?.seconds?r.lastUsed.seconds*1000:0;
+    return t<cutoff;
+  });
+  localStorage.setItem('itemCacheCleanupAt',String(Date.now()));
+  if(!stale.length) return;
+  try {
+    const batch=writeBatch(db);
+    stale.forEach(r=>batch.delete(doc(db,`households/${S.householdId}/itemCache/${r.id}`)));
+    await batch.commit();
+  } catch(e){ console.error('itemCache cleanup failed',e); }
+}
+
 async function updCache(name,cat,price=0,isRegular=false,extras={}){
   if(!name||!S.householdId||DEV) return;
   const norm=name.toLowerCase();
@@ -2138,6 +2175,18 @@ async function updCache(name,cat,price=0,isRegular=false,extras={}){
       lastPrice:price,lastQty:extras.qty||1,lastUnit:extras.unit||'ea',
       lastPackSize:extras.packSize||'',lastPriceType:extras.priceType||'each',
       lastUsed:serverTimestamp(),isRegular:isRegular||false});
+    if(S.itemCacheAll){
+      const idx=S.itemCacheAll.findIndex(r=>r.normalizedName===norm);
+      const rec={name:prev.name||name,normalizedName:norm,category:cat,
+        frequency:(prev.frequency||0)+1,
+        lastPrice:price>0?price:prev.lastPrice||0,
+        lastQty:extras.qty||prev.lastQty||1,
+        lastUnit:extras.unit||prev.lastUnit||'ea',
+        lastPackSize:extras.packSize!==undefined?extras.packSize:prev.lastPackSize||'',
+        lastPriceType:extras.priceType||prev.lastPriceType||'each',
+        isRegular:isRegular||prev.isRegular||false};
+      if(idx>=0) S.itemCacheAll[idx]=rec; else S.itemCacheAll.push(rec);
+    }
   } catch(e){}
 }
 
