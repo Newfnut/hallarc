@@ -1722,7 +1722,7 @@ async function doSaveItem(){
   if(_saving) return; _saving=true;
   document.activeElement?.blur();
   const name=q('e-name')?.value.trim(); if(!name){ _saving=false; return; }
-  try {
+
   const cat=q('e-cat')?.value||'';
   const packSize=q('e-packsize')?.value.trim()||'';
   const notes=q('e-notes')?.value.trim()||'';
@@ -1749,59 +1749,74 @@ async function doSaveItem(){
   const isStoreWl=S.editorItem?.isStoreWl||false;
   const wlCol=()=>collection(db,`households/${S.householdId}/stores/${S.store.id}/watchlist`);
   const wlRef=(id)=>doc(db,`households/${S.householdId}/stores/${S.store.id}/watchlist/${id}`);
+  const editorItemId=S.editorItem?.id;
+  const editorMode=S.editorMode;
+  const editorItemSnapshot=S.editorItem;
+  const wlCat=editorItemSnapshot?.category||cat||null;
+  const preserveChecked = editorMode==='edit' ? (editorItemSnapshot?.checked||false) : false;
 
-  if(_wl){
-    // ── Save to store watchlist ──
-    const wlData={...baseData,isWatchlist:true,checked:false};
-    if(S.editorMode==='add'){
-      if(DEV){ S.watchlistItems.push({id:'dev-wl-'+Date.now(),...wlData,isStoreWl:true}); closeSheets(); return; }
-      await addDoc(wlCol(),{...wlData,createdAt:serverTimestamp()});
+  // DEV mode: local state only, no network — apply synchronously as before
+  if(DEV){
+    if(_wl){
+      const wlData={...baseData,isWatchlist:true,checked:false};
+      if(editorMode==='add'){ S.watchlistItems.push({id:'dev-wl-'+Date.now(),...wlData,isStoreWl:true}); }
+      else if(isStoreWl){ const idx=S.watchlistItems.findIndex(i=>i.id===editorItemId); if(idx>=0) S.watchlistItems[idx]={...S.watchlistItems[idx],...wlData,isStoreWl:true}; }
+      else { S.items=S.items.filter(i=>i.id!==editorItemId); S.watchlistItems.push({id:'dev-wl-'+Date.now(),...wlData,isStoreWl:true}); }
     } else if(isStoreWl){
-      // Editing an existing watchlist item — update in place
-      if(DEV){ const idx=S.watchlistItems.findIndex(i=>i.id===S.editorItem.id); if(idx>=0) S.watchlistItems[idx]={...S.watchlistItems[idx],...wlData,isStoreWl:true}; closeSheets(); return; }
-      await updateDoc(wlRef(S.editorItem.id),wlData);
+      const tripData={...baseData,category:wlCat,isWatchlist:false,checked:false,sortOrder:Date.now()};
+      const idx=S.watchlistItems.findIndex(i=>i.id===editorItemId);
+      if(idx>=0) S.watchlistItems[idx]={...S.watchlistItems[idx],...baseData,isWatchlist:true,isStoreWl:true};
+      S.items.push({id:'dev-'+Date.now(),...tripData});
     } else {
-      // Moving a trip item to watchlist
-      if(DEV){
-        S.items=S.items.filter(i=>i.id!==S.editorItem.id);
-        S.watchlistItems.push({id:'dev-wl-'+Date.now(),...wlData,isStoreWl:true});
-        closeSheets(); return;
-      }
-      await addDoc(wlCol(),{...wlData,createdAt:serverTimestamp()});
-      await deleteDoc(doc(db,`households/${S.householdId}/trips/${S.trip.id}/items/${S.editorItem.id}`));
-      recalcTotals();
+      const data={...baseData,isWatchlist:false,checked:preserveChecked};
+      if(editorMode==='add'){ data.sortOrder=Date.now(); S.items.push({id:'dev-'+Date.now(),...data}); }
+      else { const idx=S.items.findIndex(i=>i.id===editorItemId); if(idx>=0) S.items[idx]={...S.items[idx],...data}; }
     }
-  } else if(isStoreWl){
-    // ── Promoting watchlist item to this trip (stays on watchlist) ──
-    const wlCat=S.editorItem?.category||cat||null;
-    const tripData={...baseData,category:wlCat,isWatchlist:false,checked:false,sortOrder:Date.now()};
-    const wlUpdate={...baseData,isWatchlist:true}; // keep watchlist copy current
-    if(DEV){
-      const idx=S.watchlistItems.findIndex(i=>i.id===S.editorItem.id);
-      if(idx>=0) S.watchlistItems[idx]={...S.watchlistItems[idx],...wlUpdate,isStoreWl:true};
-      S.items.push({id:'dev-'+Date.now(),...tripData}); closeSheets(); return;
-    }
-    await updateDoc(wlRef(S.editorItem.id),wlUpdate);
-    await addDoc(itemsCol(),{...tripData,createdAt:serverTimestamp()});
-    recalcTotals();
-  } else {
-    // ── Normal trip item save ──
-    const preserveChecked = S.editorMode==='edit' ? (S.editorItem?.checked||false) : false;
-    const data={...baseData,isWatchlist:false,checked:preserveChecked};
-    if(S.editorMode==='add'){
-      data.sortOrder=Date.now();
-      if(DEV){ S.items.push({id:'dev-'+Date.now(),...data}); _saving=false; closeSheets(); return; }
-      await addDoc(itemsCol(),{...data,createdAt:serverTimestamp()});
-      updCache(name,cat,finalPrice,_reg,{qty:finalQty,unit:'ea',packSize,priceType:finalPriceType,storeId:S.store?.id});
-    } else {
-      if(DEV){ const idx=S.items.findIndex(i=>i.id===S.editorItem.id); if(idx>=0) S.items[idx]={...S.items[idx],...data}; _saving=false; closeSheets(); return; }
-      await updateDoc(doc(db,`households/${S.householdId}/trips/${S.trip.id}/items/${S.editorItem.id}`),data);
-      updCache(name,cat,finalPrice,_reg,{qty:finalQty,unit:'ea',packSize,priceType:finalPriceType,storeId:S.store?.id});
-    }
-    recalcTotals();
+    _saving=false; closeSheets(); return;
   }
-  } catch(e){ console.error('Save failed',e); }
-  finally { _saving=false; closeSheets(); }
+
+  // ── Real Firestore: fire the write in the background, don't block the UI on it.
+  // Firestore's local cache + our onSnapshot listeners already reflect the change
+  // instantly; the network write itself completes whenever signal allows. This is
+  // what lets the editor close right away even on poor connections (e.g. deep in
+  // a store), instead of trapping the user until the write is acknowledged.
+  const runSave=async()=>{
+    try {
+      if(_wl){
+        const wlData={...baseData,isWatchlist:true,checked:false};
+        if(editorMode==='add'){
+          await addDoc(wlCol(),{...wlData,createdAt:serverTimestamp()});
+        } else if(isStoreWl){
+          await updateDoc(wlRef(editorItemId),wlData);
+        } else {
+          await addDoc(wlCol(),{...wlData,createdAt:serverTimestamp()});
+          await deleteDoc(doc(db,`households/${S.householdId}/trips/${S.trip.id}/items/${editorItemId}`));
+          recalcTotals();
+        }
+      } else if(isStoreWl){
+        const tripData={...baseData,category:wlCat,isWatchlist:false,checked:false,sortOrder:Date.now()};
+        const wlUpdate={...baseData,isWatchlist:true};
+        await updateDoc(wlRef(editorItemId),wlUpdate);
+        await addDoc(itemsCol(),{...tripData,createdAt:serverTimestamp()});
+        recalcTotals();
+      } else {
+        const data={...baseData,isWatchlist:false,checked:preserveChecked};
+        if(editorMode==='add'){
+          data.sortOrder=Date.now();
+          await addDoc(itemsCol(),{...data,createdAt:serverTimestamp()});
+          updCache(name,cat,finalPrice,_reg,{qty:finalQty,unit:'ea',packSize,priceType:finalPriceType,storeId:S.store?.id});
+        } else {
+          await updateDoc(doc(db,`households/${S.householdId}/trips/${S.trip.id}/items/${editorItemId}`),data);
+          updCache(name,cat,finalPrice,_reg,{qty:finalQty,unit:'ea',packSize,priceType:finalPriceType,storeId:S.store?.id});
+        }
+        recalcTotals();
+      }
+    } catch(e){ console.error('Save failed in background (will need retry when connection improves):',e); }
+  };
+
+  runSave();
+  _saving=false;
+  closeSheets();
 }
 
 async function doDeleteItem(){
