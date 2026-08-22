@@ -683,6 +683,7 @@ function rowHTML(item, dim=false, isStoreWl=false) {
     </div>
     <div class="item-row${item.checked?' checked':''}${dim?' item-dim':''}" data-iid="${item.id}">
       <div class="item-circle"></div>
+      <div class="item-icon-chip">${catIcon(item.category)}</div>
       <div class="item-body">
         <div class="item-nm">${item.name}</div>
         ${isStoreWl&&item.category?`<div class="item-detail" style="color:var(--text-secondary);font-style:italic">${item.category}</div>`:`<div class="item-detail">${item.packSize||''}${item.notes?(item.packSize?' · ':'')+item.notes:''}</div>`}
