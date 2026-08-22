@@ -130,11 +130,10 @@ body{display:flex;justify-content:center;background:var(--bg)}
 .cat-watchlist .cat-label{color:var(--text-muted)!important;opacity:.7}
 .cat-watchlist .cat-badge{background:var(--bg-secondary)!important;color:var(--text-muted)!important;opacity:.7}
 .cat-watchlist .cat-chev{color:var(--text-muted)!important;opacity:.7}
-.cat-items-wrap{background:var(--bg-card);border-radius:0;margin:0;overflow:hidden;box-shadow:none;border-top:.5px solid #d1d1d6}
+.cat-items-wrap{background:transparent;border-radius:0;margin:0;overflow:visible;box-shadow:none;border-top:none;padding:2px 0}
 
 /* ─── Item rows ─── */
-.item-wrap{position:relative;overflow:hidden}
-.item-wrap+.item-wrap{border-top:.5px solid var(--border-mid)}
+.item-wrap{position:relative;overflow:hidden;border-radius:var(--r-sm);margin:0 12px 8px;box-shadow:var(--shadow)}
 .item-reveal{position:absolute;inset:0;display:flex;align-items:stretch;pointer-events:none;z-index:0;height:100%}
 .item-reveal-left{background:var(--accent);color:white;display:flex;align-items:center;padding-left:22px;gap:8px;font-size:15px;font-weight:700;flex:0 0 50%}
 .item-reveal-right{background:var(--danger);color:white;display:flex;align-items:center;justify-content:flex-end;padding-right:18px;gap:6px;font-size:13px;font-weight:500;flex:0 0 50%;margin-left:auto;align-self:stretch}
@@ -144,7 +143,7 @@ body{display:flex;justify-content:center;background:var(--bg)}
 .irr-del.hi{opacity:1}
 .irr-move{background:var(--danger);opacity:.25}
 .irr-move.hi{opacity:1}
-.item-row{display:flex;align-items:center;gap:10px;padding:11px 16px;background:#ffffff;border-bottom:none;position:relative;z-index:1;will-change:transform;min-height:54px;-webkit-tap-highlight-color:transparent}
+.item-row{display:flex;align-items:center;gap:10px;padding:14px 16px;background:var(--bg-card);border-bottom:none;position:relative;z-index:1;will-change:transform;min-height:54px;-webkit-tap-highlight-color:transparent}
 .item-row:last-child{border-bottom:none}
 /* ─── FIX: dim watchlist items without making background transparent (which exposed reveal layer) ─── */
 .item-row.item-dim .item-circle,
