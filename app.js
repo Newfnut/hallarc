@@ -735,8 +735,8 @@ function renderEditor() {
   <div class="sheet-handle"></div>
   <div class="sheet-hdr-row">
     <div style="flex:1;font-size:17px;font-weight:600">${S.editorMode==='add'?'Add item':'Edit item'}</div>
-    ${S.editorMode==='edit'?`<button class="ico-btn" id="e-del" style="color:var(--danger);font-size:20px">🗑</button>`:''}
-    <button class="ico-btn" id="e-save-top" style="color:var(--accent);font-size:20px">✅</button>
+    ${S.editorMode==='edit'?`<button class="pill-ico-btn pill-danger" id="e-del"><i data-lucide="trash-2"></i></button>`:''}
+    <button class="pill-ico-btn pill-accent" id="e-save-top"><i data-lucide="check"></i></button>
   </div>
 
   <div class="edr-rows">
@@ -2075,6 +2075,7 @@ function openEditor(mode,item={}){
   const inner=q('editor-inner'); if(!inner) return;
   inner.innerHTML=renderEditor(); openSheet('editor-sheet');
   bindEditor();
+  if (window.lucide) lucide.createIcons();
   setTimeout(()=>q('e-name')?.focus(),380);
 }
 
