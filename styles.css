@@ -160,11 +160,11 @@ body{display:flex;justify-content:center;background:var(--bg)}
 .item-row.checked .item-nm{text-decoration:line-through;color:var(--text-secondary)}
 .item-detail{font-size:12px;color:var(--text-secondary);margin-top:2px}
 .sale-tag{display:inline-flex;align-items:center;gap:3px;background:var(--warning-bg);color:var(--warning);font-size:11px;font-weight:600;padding:1px 6px;border-radius:5px;margin-top:3px}
-.item-right{text-align:right;flex-shrink:0}
-.item-price{font-size:15px;font-weight:600}
+.item-right{text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:1px;min-width:52px}
+.item-price{font-size:15px;font-weight:700;letter-spacing:-.01em}
 .item-price-old{font-size:11px;text-decoration:line-through;color:var(--text-muted)}
-.item-price-sale{font-size:15px;font-weight:700;color:var(--warning)}
-.item-qty{font-size:12px;color:var(--text-secondary)}
+.item-price-sale{font-size:15px;font-weight:700;color:var(--warning);letter-spacing:-.01em}
+.item-qty{font-size:11px;color:var(--text-secondary);background:var(--bg-secondary);padding:1px 6px;border-radius:5px;margin-top:1px}
 .item-unit{font-size:10px;color:var(--text-muted)}
 
 /* ─── Crossed off ─── */
@@ -172,7 +172,7 @@ body{display:flex;justify-content:center;background:var(--bg)}
 .xoff-total{margin-left:auto;font-weight:600;color:var(--text-secondary)}
 
 /* ─── Total bar ─── */
-.total-bar{position:absolute;bottom:0;left:0;right:0;background:var(--header);border-top:.5px solid var(--border);padding:10px 16px calc(10px + var(--safe-b));display:flex;align-items:center;gap:0;z-index:10}
+.total-bar{position:absolute;bottom:0;left:0;right:0;background:var(--header);border-top:none;box-shadow:0 -2px 12px rgba(0,0,0,.08);padding:10px 16px calc(10px + var(--safe-b));display:flex;align-items:center;gap:0;z-index:10}
 .total-col{flex:1;text-align:center}
 .total-lbl{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-secondary);margin-bottom:1px}
 .total-val{font-size:21px;font-weight:700}

@@ -547,9 +547,7 @@ function renderTrip() {
           <span class="xoff-total">$${checkedTotal.toFixed(2)}</span>
         </div>
         <div id="t-xoff-list" style="display:none">
-          <div style="background:var(--bg-card);border-radius:var(--r);margin:0 12px 4px;overflow:hidden;box-shadow:var(--shadow)">
-            ${checked.map(i=>rowHTML(i)).join('')}
-          </div>
+          ${checked.map(i=>rowHTML(i)).join('')}
         </div>
       `:''}
 
