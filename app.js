@@ -2287,8 +2287,9 @@ function todayStr(){ const d=new Date(); return `${d.getFullYear()}-${String(d.g
 function fmtDate(d){ if(!d) return ''; return new Date(d+'T12:00:00').toLocaleDateString('en-CA',{weekday:'short',month:'short',day:'numeric'}); }
 function fmtShort(d){ if(!d) return ''; return new Date(d+'T12:00:00').toLocaleDateString('en-CA',{month:'short',day:'numeric'}); }
 function storeIco(t){ return t==='warehouse'?'🏪':t==='supermarket'?'🛒':'🏬'; }
+function lucideIconForStoreType(t){ return t==='warehouse'?'warehouse':t==='supermarket'?'shopping-cart':'store'; }
 function storeTypeLbl(t){ return t==='warehouse'?'Warehouse':t==='supermarket'?'Supermarket':'Custom'; }
-function storeIconHTML(store){ if(store?.icon) return `<span style="font-size:22px">${store.icon}</span>`; return `<img src="./store-icon.png" alt="">`; }
+function storeIconHTML(store){ if(store?.icon) return `<span style="font-size:22px">${store.icon}</span>`; return `<i data-lucide="${lucideIconForStoreType(store?.type)}" class="store-icon-lucide"></i>`; }
 function effPrice(item){ if(item.lockedPrice!=null) return item.lockedPrice; const b=item.price||0; if(!item.saleDiscount||!saleActive(item)) return b; return Math.max(0,b-item.saleDiscount); }
 function saleActive(item){ if(!item.saleExpiry) return(item.saleDiscount||0)>0; return new Date(item.saleExpiry+'T12:00:00')>=new Date(todayStr()+'T00:00:00'); }
 
