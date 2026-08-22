@@ -65,6 +65,25 @@ function guessCategory(name, storeCategories) {
   return null;
 }
 
+function lucideIconForCat(cat) {
+  if (!cat) return 'shopping-basket';
+  const l = cat.toLowerCase();
+  if (l.includes('produce')) return 'apple';
+  if (l.includes('dairy')||l.includes('egg')) return 'milk';
+  if (l.includes('meat')||l.includes('seafood')) return 'beef';
+  if (l.includes('baker')||l.includes('bread')) return 'croissant';
+  if (l.includes('frozen')) return 'snowflake';
+  if (l.includes('snack')||l.includes('candy')) return 'popcorn';
+  if (l.includes('beverage')) return 'cup-soda';
+  if (l.includes('household')||l.includes('cleaning')) return 'spray-can';
+  if (l.includes('health')||l.includes('pharmacy')||l.includes('beauty')) return 'pill';
+  if (l.includes('pet')) return 'paw-print';
+  if (l.includes('aisle')) return 'tag';
+  if (l.includes('watchlist')) return 'eye';
+  if (l.includes('pantry')||l.includes('dry')) return 'package';
+  return 'shopping-basket';
+}
+
 function catIcon(cat) {
   if (!cat) return '🛍️';
   const l = cat.toLowerCase();
@@ -206,6 +225,7 @@ function render() {
     case 'history': app.innerHTML = renderHistory(); break;
   }
   bind();
+  if (window.lucide) lucide.createIcons();
 }
 
 // ─── Auth ────────────────────────────────────
@@ -518,6 +538,7 @@ function renderTrip() {
       ${Object.entries(catMap).map(([c,ci])=>`
         <div class="cat-sec">
           <div class="cat-hdr" data-cat="${esc(c)}">
+            <i data-lucide="${lucideIconForCat(c)}" class="cat-icon"></i>
             <span class="cat-label">${c.toUpperCase()}</span>
             <span class="cat-badge">${ci.length}</span>
             <span class="cat-chev open">›</span>
@@ -681,7 +702,7 @@ function rowHTML(item, dim=false, isStoreWl=false) {
     </div>
     <div class="item-row${item.checked?' checked':''}${dim?' item-dim':''}" data-iid="${item.id}">
       <div class="item-circle"></div>
-      <div class="item-icon-chip">${catIcon(item.category)}</div>
+
       <div class="item-body">
         <div class="item-nm">${item.name}</div>
         ${isStoreWl&&item.category?`<div class="item-detail" style="color:var(--text-secondary);font-style:italic">${item.category}</div>`:`<div class="item-detail">${item.packSize||''}${item.notes?(item.packSize?' · ':'')+item.notes:''}</div>`}
@@ -2062,6 +2083,7 @@ function renderTripContent(){
   if(editorOpen){ S.tripNeedsUpdate=true; return; }
   const app=document.getElementById('app');
   app.innerHTML=renderTrip(); bindTrip();
+  if (window.lucide) lucide.createIcons();
   S.tripNeedsUpdate=false;
 }
 

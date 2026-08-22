@@ -120,6 +120,7 @@ body{display:flex;justify-content:center;background:var(--bg)}
 .cat-sec{margin-bottom:2px}
 .cat-hdr{display:flex;align-items:center;padding:14px 16px 8px;gap:8px;cursor:pointer;-webkit-tap-highlight-color:transparent}
 /* Store-colour theming for category headers — overridden by specific classes below */
+.cat-icon{width:15px;height:15px;stroke:var(--store-color,var(--text-secondary));flex-shrink:0}
 .cat-label{font-size:13px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--store-color,var(--text-secondary));flex:1}
 .cat-badge{font-size:11px;background:var(--store-bg,var(--bg-secondary));color:var(--store-color,var(--text-secondary));padding:2px 7px;border-radius:9px}
 .cat-chev{color:var(--store-color,var(--text-muted));font-size:13px;transition:transform .2s}
