@@ -288,8 +288,8 @@ function renderHome() {
           const ts=S.stores.find(s=>s.id===t.storeId);
           const bg=sColorBg(ts), txt=sColorTxt(ts);
           const isNext=activeTrips.findIndex(x=>x.storeId===t.storeId)===activeTrips.indexOf(t);
-               return `<div class="card card-tap trip-row${isNext?' trip-row-next':''}" data-tid="${t.id}" style="${isNext?`background:${bg};`:''}">
-            <div class="trip-icon">${storeIconHTML(ts)}</div>
+               return `<div class="card card-tap trip-row${isNext?' trip-row-next':''}" data-tid="${t.id}" style="${isNext?`background:${bg};`:''}--card-accent:${txt};--card-accent-bg:${bg}">
+            <div class="trip-icon" style="background:${bg}">${storeIconHTML(ts)}</div>
             <div class="trip-info">
               <div class="trip-nm" style="${isNext?`color:${txt};`:''}">${t.storeName}</div>
               <div class="trip-meta">${fmtDate(t.tripDate)}${t.label?' · '+t.label:''} · ${t.itemCount||0} item${t.itemCount!==1?'s':''}</div>
@@ -306,7 +306,7 @@ function renderHome() {
         <div class="store-grid">
           ${S.stores.map(s=>{
             const bg=sColorBg(s), txt=sColorTxt(s);
-            return `<div class="store-card" data-sid="${s.id}">
+            return `<div class="store-card" data-sid="${s.id}" style="--card-accent:${txt};--card-accent-bg:${bg}">
             <div class="store-icon" style="background:${bg};color:${txt}">${storeIconHTML(s)}</div>
               <div class="store-nm">${s.name}</div>
               <div class="store-tp">${storeTypeLbl(s.type)}</div>

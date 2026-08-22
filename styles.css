@@ -76,7 +76,7 @@ body{display:flex;justify-content:center;background:var(--bg)}
 
 /* ─── Home: store grid ─── */
 .store-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 12px 12px}
-.store-card{background:var(--bg-card);border-radius:var(--r);padding:16px;transition:transform .1s;box-shadow:var(--shadow)}
+.store-card{background:color-mix(in srgb,var(--card-accent-bg,var(--bg-card)) 35%,var(--bg-card));border-radius:var(--r);padding:16px;transition:transform .1s;box-shadow:var(--shadow);border-top:3px solid var(--card-accent,transparent)}
 .store-card:active{transform:scale(.97)}
 .store-icon{width:42px;height:42px;border-radius:10px;background:var(--accent-bg);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:10px}
 .store-icon img,.trip-icon img,.hist-icon img{width:26px;height:26px;object-fit:contain;filter:brightness(0) invert(1);opacity:.92}
@@ -88,7 +88,7 @@ body{display:flex;justify-content:center;background:var(--bg)}
 .store-edit-hint{font-size:10px;color:var(--text-muted);margin-top:4px;opacity:.7}
 
 /* ─── Home: trip cards ─── */
-.trip-row{display:flex;align-items:center;gap:12px}
+.trip-row{display:flex;align-items:center;gap:12px;border-left:3px solid var(--card-accent,transparent)}
 .trip-icon{width:48px;height:48px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:32px;flex-shrink:0}
 .trip-info{flex:1;min-width:0}
 .trip-nm{font-size:15px;font-weight:600}
