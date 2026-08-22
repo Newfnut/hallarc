@@ -58,10 +58,10 @@ body{display:flex;justify-content:center;background:var(--bg)}
 .hdr-title{font-size:17px;font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hdr-sub{font-size:12px;color:var(--text-secondary);margin-top:1px}
 .ico-btn{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);transition:background .12s;font-size:18px;flex-shrink:0}
-.pill-ico-btn{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:transform .1s}
-.pill-ico-btn:active{transform:scale(.9)}
+.pill-ico-btn{height:36px;min-width:44px;padding:0 14px;border-radius:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:transform .1s;margin-left:10px}
+.pill-ico-btn:active{transform:scale(.95)}
 .pill-ico-btn i{width:18px;height:18px;stroke:currentColor}
-.pill-accent{background:var(--accent-bg);color:var(--accent)}
+.pill-accent{background:var(--accent);color:var(--accent-fg)}
 .pill-danger{background:var(--danger-bg);color:var(--danger)}
 .ico-btn:active{background:var(--bg-secondary)}
 
