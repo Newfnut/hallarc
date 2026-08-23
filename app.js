@@ -979,7 +979,20 @@ async function doAuth() {
 let _newStoreColor='green';
 let _editStoreColor='green';
 
+function bindHomeHeroScroll() {
+  const scroll=q('home-scroll'), hero=document.querySelector('.home-hero');
+  if(!scroll||!hero) return;
+  const maxScroll=140, minHeight=90, maxHeight=220;
+  scroll.addEventListener('scroll',()=>{
+    const y=Math.min(scroll.scrollTop,maxScroll);
+    const ratio=y/maxScroll;
+    hero.style.height=(maxHeight-ratio*(maxHeight-minHeight))+'px';
+    hero.style.opacity=String(1-ratio*0.2);
+  },{passive:true});
+}
+
 function bindHome() {
+  bindHomeHeroScroll();
   on('h-settings','click',()=>{haptic('light');openSheet('settings-sheet');});
   on('s-theme-row','click',()=>{setTheme(S.theme==='dark'?'light':'dark');closeSheets();render();});
   on('s-history-row','click',()=>{closeSheets();setTimeout(()=>goHistory(),320);});
