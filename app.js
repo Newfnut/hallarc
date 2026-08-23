@@ -273,6 +273,12 @@ function renderHome() {
       <img src="./hero.png" alt="" class="home-hero-img">
       <div class="home-hero-overlay">
         <div class="home-hero-title">Haul &amp; Paws 🐾</div>
+        <div class="home-hero-status">${(()=>{
+          const n=activeTrips.length;
+          if(n===0) return 'Nothing on your lists right now';
+          const total=activeTrips.reduce((s,t)=>s+(t.totalActive||0),0);
+          return `${n} active trip${n!==1?'s':''} · $${total.toFixed(2)} estimated`;
+        })()}</div>
         <div class="home-hero-actions">
           <button class="ico-btn home-hero-btn" id="h-settings" title="Settings" style="font-size:20px;position:relative">
             ⚙️
