@@ -102,7 +102,7 @@ body{display:flex;justify-content:center;background:var(--bg)}
 .trip-total{text-align:right;flex-shrink:0}
 .trip-amt{font-size:15px;font-weight:700;color:var(--accent)}
 .trip-lbl{font-size:11px;color:var(--text-muted)}
-.trip-row-repeat{background:color-mix(in srgb,var(--card-accent-bg,transparent) 44%,var(--bg-card))}
+.trip-row-tinted{background:color-mix(in srgb,var(--card-accent-bg,transparent) 50%,var(--bg-card))}
 
 /* ─── Trip: add bar ─── */
 .add-bar{background:var(--bg-card);border-bottom:.5px solid var(--border);padding:8px 12px;display:flex;gap:8px;flex-shrink:0;position:relative;z-index:5}

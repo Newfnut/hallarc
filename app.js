@@ -287,8 +287,8 @@ function renderHome() {
         ${activeTrips.map(t=>{
           const ts=S.stores.find(s=>s.id===t.storeId);
           const bg=sColorBg(ts), txt=sColorTxt(ts);
-          const isRepeat=activeTrips.findIndex(x=>x.storeId===t.storeId)!==activeTrips.indexOf(t);
-               return `<div class="card card-tap trip-row${isRepeat?' trip-row-repeat':''}" data-tid="${t.id}" style="--card-accent:${txt};--card-accent-bg:${bg}">
+          const isFirst=activeTrips.findIndex(x=>x.storeId===t.storeId)===activeTrips.indexOf(t);
+               return `<div class="card card-tap trip-row${isFirst?' trip-row-tinted':''}" data-tid="${t.id}" style="--card-accent:${txt};--card-accent-bg:${bg}">
             <div class="trip-icon" style="background:${bg}">${storeIconHTML(ts)}</div>
             <div class="trip-info">
               <div class="trip-nm">${t.storeName}</div>
