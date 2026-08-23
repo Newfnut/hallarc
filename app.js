@@ -759,9 +759,17 @@ function renderEditor() {
       <span class="edr-lbl">Price / item</span>
       <div class="edr-pair">
         <input class="edr-inp" id="e-price" type="number" value="${eachPriceVal}" min="0" step="0.01" placeholder="0.00">
-        <input class="edr-inp edr-qty" id="e-qty" type="number" value="${eachQtyVal}" min="1" step="1" onfocus="this.select()" style="text-align:center">
-        <span class="edr-unit-lbl">qty</span>
+        <div class="edr-qty-stepper">
+          <button type="button" class="qty-btn" id="e-qty-dec" aria-label="Decrease quantity">−</button>
+          <input class="edr-qty" id="e-qty" type="number" value="${eachQtyVal}" min="1" step="1" onfocus="this.select()" style="text-align:center">
+          <button type="button" class="qty-btn" id="e-qty-inc" aria-label="Increase quantity">+</button>
+        </div>
       </div>
+    </div>
+
+    <div class="edr-row edr-row-tog">
+      <span class="edr-lbl">Priced by weight</span>
+      <div class="tog${isWeight?' on':''}" id="weight-tog"></div>
     </div>
 
     <div class="edr-row">
@@ -769,9 +777,18 @@ function renderEditor() {
       <input class="edr-inp" id="e-notes" type="text" value="${esc(item.notes||'')}" placeholder="Any details…">
     </div>
 
-    <div class="edr-row">
-      <span class="edr-lbl">Category</span>
-      <select class="edr-inp" id="e-cat">
+    <div class="edr-row" style="align-items:flex-start">
+      <span class="edr-lbl" style="padding-top:8px">Category</span>
+      <div class="cat-chip-row" id="cat-chip-row">
+        <div class="cat-chip${!item.category?' sel':''}" data-cat="">
+          <span>${catIcon('')}</span><span>None</span>
+        </div>
+        ${cats.map(c=>`
+          <div class="cat-chip${item.category===c?' sel':''}" data-cat="${esc(c)}">
+            <span>${catIcon(c)}</span><span>${c}</span>
+          </div>`).join('')}
+      </div>
+      <select id="e-cat" style="display:none">
         <option value="">— Uncategorized —</option>
         ${cats.map(c=>`<option value="${esc(c)}"${item.category===c?' selected':''}>${c}</option>`).join('')}
       </select>
@@ -784,9 +801,7 @@ function renderEditor() {
 
   </div>
 
-  <div class="edr-divider"><span>or by weight</span></div>
-
-  <div class="edr-rows edr-rows-green">
+  <div class="edr-rows edr-rows-green" id="weight-section" style="margin-top:8px;${isWeight?'':'display:none'}">
 
     <div class="edr-row">
       <span class="edr-lbl">Price / weight</span>
@@ -1638,6 +1653,29 @@ function bindEditor(){
   _wl=S.editorItem?.isWatchlist||false;
   _reg=S.editorItem?.isRegular||false;
   _wt=(S.editorItem?.priceType==='per_kg')?'per_kg':'per_lb';
+
+  qAll('.cat-chip').forEach(chip=>chip.addEventListener('click',()=>{
+    qAll('.cat-chip').forEach(c=>c.classList.remove('sel'));
+    chip.classList.add('sel');
+    const sel=q('e-cat'); if(sel) sel.value=chip.dataset.cat;
+    haptic('light');
+  }));
+
+  const qtyInp=q('e-qty');
+  on('e-qty-dec','click',()=>{ if(!qtyInp) return; qtyInp.value=Math.max(1,(parseInt(qtyInp.value)||1)-1); haptic('light'); });
+  on('e-qty-inc','click',()=>{ if(!qtyInp) return; qtyInp.value=(parseInt(qtyInp.value)||1)+1; haptic('light'); });
+
+  on('weight-tog','click',()=>{
+    const willBeOn=!q('weight-tog').classList.contains('on');
+    q('weight-tog').classList.toggle('on',willBeOn);
+    const ws=q('weight-section'); if(ws) ws.style.display=willBeOn?'block':'none';
+    if(!willBeOn){
+      const wp=q('e-wprice'); if(wp) wp.value='';
+      const wq=q('e-wqty'); if(wq) wq.value='';
+      const eqv=q('e-w-equiv'); if(eqv) eqv.textContent='';
+    }
+    haptic('light'); updateDiscLabel(); updateSaleHint();
+  });
 
   on('e-save-top','click',doSaveItem);
   on('sale-tog','click',()=>{ _sale=!_sale; q('sale-tog').classList.toggle('on',_sale); const sf=q('sale-fields'); if(sf) sf.style.display=_sale?'block':'none'; haptic('light'); updateDiscLabel(); updateSaleHint(); });  on('wl-tog','click',()=>{ _wl=!_wl; q('wl-tog').classList.toggle('on',_wl); haptic('light'); });
