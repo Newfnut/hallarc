@@ -1,6 +1,6 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
-import { getFirestore, collection, doc, addDoc, setDoc, getDoc, getDocs, onSnapshot, updateDoc, deleteDoc, query as fsQ, orderBy, where, serverTimestamp, enableIndexedDbPersistence, writeBatch, limit } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+import { getFirestore, collection, doc, addDoc, setDoc, getDoc, getDocFromCache, getDocs, onSnapshot, updateDoc, deleteDoc, query as fsQ, orderBy, where, serverTimestamp, enableIndexedDbPersistence, writeBatch, limit } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
 // ═══════════════════════════════════════════
 // CONFIG & FIREBASE INIT
@@ -698,7 +698,10 @@ function rowHTML(item, dim=false, isStoreWl=false) {
       <div class="item-reveal-left">${isStoreWl?'＋ Add to trip':'✓ Check off'}</div>
       ${isStoreWl
         ?`<div class="item-reveal-right">Remove ✕</div>`
-        :`<div class="item-reveal-right irr-split"><div class="irr-del">↗ Move</div><div class="irr-move">🗑 Delete</div></div>`}
+        :`<div class="item-reveal-right swipe-action" data-mode="delete">
+            <div class="swipe-content swipe-content-delete"><i data-lucide="trash-2"></i><span>Delete</span></div>
+            <div class="swipe-content swipe-content-move"><i data-lucide="corner-up-right"></i><span>Move</span></div>
+          </div>`}
     </div>
     <div class="item-row${item.checked?' checked':''}${dim?' item-dim':''}" data-iid="${item.id}">
       <div class="item-circle"></div>
@@ -1870,7 +1873,7 @@ function bindItemInteractions(){
 function setupSwipe(wrap,row,iid,isStoreWl=false){
   let sx=0,sy=0,cx=0,going=false;
   const THRESH=65;
-  row.addEventListener('touchstart',e=>{ sx=e.touches[0].clientX; sy=e.touches[0].clientY; cx=0; going=true; row.style.transition='none'; },{passive:true});
+  row.addEventListener('touchstart',e=>{ sx=e.touches[0].clientX; sy=e.touches[0].clientY; cx=0; going=true; row.style.transition='none'; if(!isStoreWl){ const panel=wrap.querySelector('.swipe-action'); if(panel) panel.dataset.mode='delete'; } },{passive:true});
   row.addEventListener('touchmove',e=>{
     if(!going) return;
     const dx=e.touches[0].clientX-sx, dy=e.touches[0].clientY-sy;
@@ -1879,16 +1882,14 @@ function setupSwipe(wrap,row,iid,isStoreWl=false){
     cx=Math.max(isStoreWl?-100:-220,Math.min(100,dx));
     row.style.transform=`translateX(${cx}px)`;
     if(!isStoreWl){
-      const dEl=wrap.querySelector('.irr-del'),mEl=wrap.querySelector('.irr-move');
-      if(dEl&&mEl){ dEl.classList.toggle('hi',cx<-70&&cx>=-140); mEl.classList.toggle('hi',cx<-140); }
+      const panel=wrap.querySelector('.swipe-action');
+      if(panel) panel.dataset.mode = cx<-140 ? 'move' : 'delete';
     }
   },{passive:false});
   row.addEventListener('touchend',()=>{
     if(!going) return; going=false;
     row.style.transition='transform .25s ease';
-    const dEl2=wrap.querySelector('.irr-del'),mEl2=wrap.querySelector('.irr-move');
-    if(dEl2) dEl2.classList.remove('hi');
-    if(mEl2) mEl2.classList.remove('hi');
+
     if(!isStoreWl&&cx<-140){
       row.style.transform=''; haptic('medium'); setTimeout(()=>openMoveToList(iid),50);
     } else if(cx<-65){
@@ -2114,13 +2115,21 @@ async function loadHousehold(hid){
   const su=onSnapshot(fsQ(col('stores'),orderBy('sortOrder')),snap=>{ S.stores=snap.docs.map(d=>({id:d.id,...d.data()})); if(S.screen==='home') render(); });
   const tu=onSnapshot(col('trips'),snap=>{ S.trips=snap.docs.map(d=>({id:d.id,...d.data()})); if(S.screen==='home') render(); });
   S.unsubs.push(su,tu);
-  const chk=await getDocs(col('stores'));
-  if(chk.empty) await seedStores(hid);
+  try {
+    const chk=await withTimeout(getDocs(col('stores')));
+    if(chk.empty) await seedStores(hid);
+  } catch(e){
+    // Offline on first load with nothing cached yet — the onSnapshot listeners above
+    // will populate S.stores/S.trips as soon as any connection appears, so it's safe
+    // to just skip the seed-check here rather than hang.
+  }
 }
 
 async function loadTrip(tripId){
   S.unsubs.forEach(u=>u()); S.unsubs=[];
-  const snap=await getDoc(doc(db,`households/${S.householdId}/trips/${tripId}`));
+  let snap;
+  try { snap=await withTimeout(getDoc(doc(db,`households/${S.householdId}/trips/${tripId}`))); }
+  catch(e){ try { snap=await getDocFromCache(doc(db,`households/${S.householdId}/trips/${tripId}`)); } catch(e2){ go('home'); return; } }
   if(!snap.exists()){ go('home'); return; }
   S.trip={id:tripId,...snap.data()};
   S.store=S.stores.find(s=>s.id===S.trip.storeId)||{categories:[]};
@@ -2262,10 +2271,13 @@ if(DEV){
 onAuthStateChanged(auth,async user=>{
   if(user){
     S.user=user;
-    let ud=await getDoc(doc(db,'users',user.uid));
-    if(!ud.exists()){ await new Promise(r=>setTimeout(r,1500)); ud=await getDoc(doc(db,'users',user.uid)); }
-    if(ud.exists()){ await loadHousehold(ud.data().householdId); go('home'); }
-    else { await signOut(auth); go('auth'); }
+    let ud;
+    try { ud=await withTimeout(getDoc(doc(db,'users',user.uid))); }
+    catch(e){ try { ud=await getDocFromCache(doc(db,'users',user.uid)); } catch(e2){ ud=null; } }
+    if(ud&&!ud.exists()){ await new Promise(r=>setTimeout(r,1500)); try{ ud=await withTimeout(getDoc(doc(db,'users',user.uid))); }catch(e){} }
+    if(ud&&ud.exists()){ await loadHousehold(ud.data().householdId); go('home'); }
+    else if(ud){ await signOut(auth); go('auth'); }
+    else { go('auth'); } // couldn't reach network or cache at all — safest is to show sign-in rather than spin forever
   } else go('auth');
 });
 
@@ -2281,6 +2293,12 @@ function esc(s){ return String(s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;'
 function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
 function rndCode(){ return Math.random().toString(36).toUpperCase().slice(2,8); }
 function debounce(fn,ms){ let t; return(...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; }
+function withTimeout(promise,ms=6000){
+  return Promise.race([
+    promise,
+    new Promise((_,reject)=>setTimeout(()=>reject(new Error('timeout')),ms))
+  ]);
+}
 function compressImage(file,maxBytes){
   return new Promise(resolve=>{
     const img=new Image(), url=URL.createObjectURL(file);
