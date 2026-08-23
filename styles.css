@@ -95,6 +95,7 @@ body{display:flex;justify-content:center;background:var(--bg)}
 
 /* ─── Home: trip cards ─── */
 .trip-row{display:flex;align-items:center;gap:12px;border-left:3px solid var(--card-accent,transparent)}
+.trip-row-repeat{background:color-mix(in srgb,var(--card-accent-bg,transparent) 22%,var(--bg-card))}
 .trip-icon{width:48px;height:48px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:32px;flex-shrink:0}
 .trip-info{flex:1;min-width:0}
 .trip-nm{font-size:15px;font-weight:600;color:var(--card-accent,var(--text))}
