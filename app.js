@@ -2425,8 +2425,3 @@ if('serviceWorker' in navigator){
 }
 try { screen.orientation?.lock?.('portrait').catch(()=>{}); } catch(_){}
 render();
-.edr-qty-stepper{display:flex;align-items:center;background:var(--bg-input);border-radius:6px;overflow:hidden;flex-shrink:0}
-.edr-qty-stepper .edr-qty{background:none;width:34px;flex:0 0 34px;padding:7px 0}
-.qty-btn{width:28px;height:100%;padding:7px 0;font-size:15px;font-weight:600;color:var(--text-secondary);background:none;border:none;flex-shrink:0}
-.qty-btn:active{background:var(--border-mid)}
-.edr-wtotal{font-size:13px;font-weight:600;color:var(--text);flex-shrink:0;min-width:54px;text-align:right}
