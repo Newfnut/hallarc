@@ -415,11 +415,10 @@ body{display:flex;justify-content:center;background:var(--bg)}
 .qty-btn{width:28px;height:100%;padding:7px 0;font-size:15px;font-weight:600;color:var(--text-secondary);background:none;border:none;flex-shrink:0}
 .qty-btn:active{background:var(--border-mid)}
 .edr-wtotal{font-size:13px;font-weight:600;color:var(--text);flex-shrink:0;min-width:54px;text-align:right}
-.edr-inp[type="date"]{width:100%;min-width:0;box-sizing:border-box;-webkit-appearance:none;appearance:none}
 .edr-qty-stepper{display:flex;align-items:center;background:var(--bg-input);border-radius:6px;overflow:hidden;flex-shrink:0}
 .edr-qty-stepper .edr-qty{background:none;width:34px;flex:0 0 34px;padding:7px 0}
 .qty-btn{width:28px;height:100%;padding:7px 0;font-size:15px;font-weight:600;color:var(--text-secondary);background:none;border:none;flex-shrink:0}
 .qty-btn:active{background:var(--border-mid)}
 .edr-wtotal{font-size:13px;font-weight:600;color:var(--text);flex-shrink:0;min-width:54px;text-align:right}
-.edr-inp[type="date"]{width:100%;min-width:0;box-sizing:border-box;-webkit-appearance:none;appearance:none}
+.edr-inp[type="date"]{flex:1 1 auto;min-width:0;box-sizing:border-box;-webkit-appearance:none;appearance:none}
 #e-exp{width:100% !important;flex:1 1 auto !important;min-width:0 !important;box-sizing:border-box !important;-webkit-appearance:none;appearance:none}
