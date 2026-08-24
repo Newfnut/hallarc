@@ -1710,7 +1710,6 @@ function bindEditor(){
     inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); inp.blur(); setTimeout(()=>doSaveItem(),80); } });
   });
 }
-}
 
 function updateWeightEquiv(){
   const el=q('e-w-equiv'); if(!el) return;
