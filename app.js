@@ -748,7 +748,7 @@ function renderEditor() {
     <button class="pill-ico-btn pill-accent" id="e-save-top"><i data-lucide="check"></i></button>
   </div>
 
-  <div class="edr-rows">
+   <div class="edr-rows">
 
     <div class="edr-row">
       <span class="edr-lbl">Name</span>
@@ -756,20 +756,11 @@ function renderEditor() {
     </div>
 
     <div class="edr-row">
-      <span class="edr-lbl">Price / item</span>
-      <div class="edr-pair">
-        <input class="edr-inp" id="e-price" type="number" value="${eachPriceVal}" min="0" step="0.01" placeholder="0.00">
-        <div class="edr-qty-stepper">
-          <button type="button" class="qty-btn" id="e-qty-dec" aria-label="Decrease quantity">−</button>
-          <input class="edr-qty" id="e-qty" type="number" value="${eachQtyVal}" min="1" step="1" onfocus="this.select()" style="text-align:center">
-          <button type="button" class="qty-btn" id="e-qty-inc" aria-label="Increase quantity">+</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="edr-row edr-row-tog">
-      <span class="edr-lbl">Priced by weight</span>
-      <div class="tog${isWeight?' on':''}" id="weight-tog"></div>
+      <span class="edr-lbl">Category</span>
+      <select class="edr-inp" id="e-cat">
+        <option value="">— Uncategorized —</option>
+        ${cats.map(c=>`<option value="${esc(c)}"${item.category===c?' selected':''}>${c}</option>`).join('')}
+      </select>
     </div>
 
     <div class="edr-row">
@@ -777,50 +768,49 @@ function renderEditor() {
       <input class="edr-inp" id="e-notes" type="text" value="${esc(item.notes||'')}" placeholder="Any details…">
     </div>
 
-    <div class="edr-row" style="align-items:flex-start">
-      <span class="edr-lbl" style="padding-top:8px">Category</span>
-      <div class="cat-chip-row" id="cat-chip-row">
-        <div class="cat-chip${!item.category?' sel':''}" data-cat="">
-          <span>${catIcon('')}</span><span>None</span>
+    <div class="edr-row edr-row-tog">
+      <span class="edr-lbl">Priced by weight</span>
+      <div class="tog${isWeight?' on':''}" id="weight-tog"></div>
+    </div>
+
+    <div id="each-section" style="${isWeight?'display:none':''}">
+      <div class="edr-row">
+        <span class="edr-lbl">Price / item</span>
+        <div class="edr-pair">
+          <input class="edr-inp" id="e-price" type="number" value="${eachPriceVal}" min="0" step="0.01" placeholder="0.00">
+          <div class="edr-qty-stepper">
+            <button type="button" class="qty-btn" id="e-qty-dec" aria-label="Decrease quantity">−</button>
+            <input class="edr-qty" id="e-qty" type="number" value="${eachQtyVal}" min="1" step="1" onfocus="this.select()" style="text-align:center">
+            <button type="button" class="qty-btn" id="e-qty-inc" aria-label="Increase quantity">+</button>
+          </div>
         </div>
-        ${cats.map(c=>`
-          <div class="cat-chip${item.category===c?' sel':''}" data-cat="${esc(c)}">
-            <span>${catIcon(c)}</span><span>${c}</span>
-          </div>`).join('')}
       </div>
-      <select id="e-cat" style="display:none">
-        <option value="">— Uncategorized —</option>
-        ${cats.map(c=>`<option value="${esc(c)}"${item.category===c?' selected':''}>${c}</option>`).join('')}
-      </select>
-    </div>
-
-    <div class="edr-row">
-      <span class="edr-lbl">Pack size</span>
-      <input class="edr-inp" id="e-packsize" type="text" value="${esc(item.packSize||'')}" placeholder="e.g. 906 g, 1.5 kg, 12 ct" autocorrect="off">
-    </div>
-
-  </div>
-
-  <div class="edr-rows edr-rows-green" id="weight-section" style="margin-top:8px;${isWeight?'':'display:none'}">
-
-    <div class="edr-row">
-      <span class="edr-lbl">Price / weight</span>
-      <div class="edr-pair">
-        <input class="edr-inp edr-green" id="e-wprice" type="number" value="${wPriceVal}" min="0" step="0.01" placeholder="0.00">
-        <div class="edr-wt-toggle">
-          <button class="wt-btn${wType==='per_lb'?' sel':''}" data-pt="per_lb">lb</button>
-          <button class="wt-btn${wType==='per_kg'?' sel':''}" data-pt="per_kg">kg</button>
-        </div>
+      <div class="edr-row">
+        <span class="edr-lbl">Pack size</span>
+        <input class="edr-inp" id="e-packsize" type="text" value="${esc(item.packSize||'')}" placeholder="e.g. 906 g, 1.5 kg, 12 ct" autocorrect="off">
       </div>
     </div>
 
-    <div class="edr-row">
-      <span class="edr-lbl" id="e-wqty-label">Weight</span>
-      <input class="edr-inp edr-green edr-qty" id="e-wqty" type="number" value="${wQtyVal}" min="0" step="0.1" onfocus="this.select()" placeholder="0.0" style="text-align:center">
+    <div id="weight-section" style="${isWeight?'':'display:none'}">
+      <div class="edr-row">
+        <span class="edr-lbl">Price / weight</span>
+        <div class="edr-pair">
+          <input class="edr-inp edr-green" id="e-wprice" type="number" value="${wPriceVal}" min="0" step="0.01" placeholder="0.00">
+          <div class="edr-wt-toggle">
+            <button class="wt-btn${wType==='per_lb'?' sel':''}" data-pt="per_lb">lb</button>
+            <button class="wt-btn${wType==='per_kg'?' sel':''}" data-pt="per_kg">kg</button>
+          </div>
+        </div>
+      </div>
+      <div class="edr-row">
+        <span class="edr-lbl" id="e-wqty-label">Weight</span>
+        <input class="edr-inp edr-green edr-qty" id="e-wqty" type="number" value="${wQtyVal}" min="0" step="0.1" onfocus="this.select()" placeholder="0.0" style="text-align:center">
+        <span class="edr-wtotal" id="e-wtotal"></span>
+      </div>
+      <div class="w-equiv" id="e-w-equiv" style="padding:0 2px 6px"></div>
     </div>
 
   </div>
-  <div class="w-equiv" id="e-w-equiv" style="padding:4px 16px 8px"></div>
 
   <div class="edr-rows" style="margin-top:8px">
 
@@ -1654,31 +1644,9 @@ function bindEditor(){
   _reg=S.editorItem?.isRegular||false;
   _wt=(S.editorItem?.priceType==='per_kg')?'per_kg':'per_lb';
 
-  qAll('.cat-chip').forEach(chip=>chip.addEventListener('click',()=>{
-    qAll('.cat-chip').forEach(c=>c.classList.remove('sel'));
-    chip.classList.add('sel');
-    const sel=q('e-cat'); if(sel) sel.value=chip.dataset.cat;
-    haptic('light');
-  }));
-
-  const qtyInp=q('e-qty');
-  on('e-qty-dec','click',()=>{ if(!qtyInp) return; qtyInp.value=Math.max(1,(parseInt(qtyInp.value)||1)-1); haptic('light'); });
-  on('e-qty-inc','click',()=>{ if(!qtyInp) return; qtyInp.value=(parseInt(qtyInp.value)||1)+1; haptic('light'); });
-
-  on('weight-tog','click',()=>{
-    const willBeOn=!q('weight-tog').classList.contains('on');
-    q('weight-tog').classList.toggle('on',willBeOn);
-    const ws=q('weight-section'); if(ws) ws.style.display=willBeOn?'block':'none';
-    if(!willBeOn){
-      const wp=q('e-wprice'); if(wp) wp.value='';
-      const wq=q('e-wqty'); if(wq) wq.value='';
-      const eqv=q('e-w-equiv'); if(eqv) eqv.textContent='';
-    }
-    haptic('light'); updateDiscLabel(); updateSaleHint();
-  });
-
   on('e-save-top','click',doSaveItem);
-  on('sale-tog','click',()=>{ _sale=!_sale; q('sale-tog').classList.toggle('on',_sale); const sf=q('sale-fields'); if(sf) sf.style.display=_sale?'block':'none'; haptic('light'); updateDiscLabel(); updateSaleHint(); });  on('wl-tog','click',()=>{ _wl=!_wl; q('wl-tog').classList.toggle('on',_wl); haptic('light'); });
+  on('sale-tog','click',()=>{ _sale=!_sale; q('sale-tog').classList.toggle('on',_sale); const sf=q('sale-fields'); if(sf) sf.style.display=_sale?'block':'none'; haptic('light'); updateDiscLabel(); updateSaleHint(); });
+  on('wl-tog','click',()=>{ _wl=!_wl; q('wl-tog').classList.toggle('on',_wl); haptic('light'); });
   on('reg-tog','click',()=>{ _reg=!_reg; q('reg-tog').classList.toggle('on',_reg); haptic('light'); });
   on('e-save','click',doSaveItem);
   on('e-del','click',doDeleteItem);
@@ -1701,15 +1669,34 @@ function bindEditor(){
   });
   on('editor-sheet','click',e=>{ if(e.target.id==='editor-sheet') closeSheets(); });
 
+  const qtyInp=q('e-qty');
+  on('e-qty-dec','click',()=>{ if(!qtyInp) return; qtyInp.value=Math.max(1,(parseInt(qtyInp.value)||1)-1); haptic('light'); });
+  on('e-qty-inc','click',()=>{ if(!qtyInp) return; qtyInp.value=(parseInt(qtyInp.value)||1)+1; haptic('light'); });
+
+  on('weight-tog','click',()=>{
+    const willBeOn=!q('weight-tog').classList.contains('on');
+    q('weight-tog').classList.toggle('on',willBeOn);
+    const es=q('each-section'), ws=q('weight-section');
+    if(es) es.style.display=willBeOn?'none':'block';
+    if(ws) ws.style.display=willBeOn?'block':'none';
+    if(!willBeOn){
+      const wp=q('e-wprice'); if(wp) wp.value='';
+      const wq=q('e-wqty'); if(wq) wq.value='';
+      const eqv=q('e-w-equiv'); if(eqv) eqv.textContent='';
+      const wt=q('e-wtotal'); if(wt) wt.textContent='';
+    }
+    haptic('light'); updateDiscLabel(); updateSaleHint(); updateWeightTotal();
+  });
+
   qAll('.wt-btn').forEach(b=>b.addEventListener('click',()=>{
     qAll('.wt-btn').forEach(x=>x.classList.remove('sel'));
     b.classList.add('sel'); _wt=b.dataset.pt; haptic('light');
-    updateWeightEquiv(); updateDiscLabel(); updateSaleHint();
+    updateWeightEquiv(); updateDiscLabel(); updateSaleHint(); updateWeightTotal();
   }));
   const wPriceInp=q('e-wprice');
   const wQtyInp=q('e-wqty');
-  if(wPriceInp){ wPriceInp.addEventListener('input',()=>{ updateWeightEquiv(); updateSaleHint(); updateDiscLabel(); }); }
-  if(wQtyInp){  wQtyInp.addEventListener('input',()=>{ updateWeightEquiv(); updateSaleHint(); }); }
+  if(wPriceInp){ wPriceInp.addEventListener('input',()=>{ updateWeightEquiv(); updateSaleHint(); updateDiscLabel(); updateWeightTotal(); }); }
+  if(wQtyInp){  wQtyInp.addEventListener('input',()=>{ updateWeightEquiv(); updateSaleHint(); updateWeightTotal(); }); }
   const ePriceInp=q('e-price');
   if(ePriceInp){ ePriceInp.addEventListener('input',()=>{ updateSaleHint(); updateDiscLabel(); }); }
   const eDiscInp=q('e-disc');
@@ -1717,10 +1704,12 @@ function bindEditor(){
   updateWeightEquiv();
   updateSaleHint();
   updateDiscLabel();
+  updateWeightTotal();
   document.querySelectorAll('#editor-inner .finput').forEach(inp=>{
     if(inp.tagName==='SELECT'||inp.type==='number'||inp.type==='date') return;
     inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); inp.blur(); setTimeout(()=>doSaveItem(),80); } });
   });
+}
 }
 
 function updateWeightEquiv(){
@@ -1739,6 +1728,14 @@ function updateWeightEquiv(){
     el.textContent=`$${price.toFixed(2)}/kg = $${(price*0.453592).toFixed(2)}/lb`;
     if(lbl) lbl.textContent='Weight (kg)';
   }
+}
+
+function updateWeightTotal(){
+  const el=q('e-wtotal'); if(!el) return;
+  const price=parseFloat(q('e-wprice')?.value)||0;
+  const wt=parseFloat(q('e-wqty')?.value)||0;
+  if(price<=0||wt<=0){ el.textContent=''; return; }
+  el.textContent=`= $${(price*wt).toFixed(2)}`;
 }
 
 function updateDiscLabel(){
@@ -2429,3 +2426,8 @@ if('serviceWorker' in navigator){
 }
 try { screen.orientation?.lock?.('portrait').catch(()=>{}); } catch(_){}
 render();
+.edr-qty-stepper{display:flex;align-items:center;background:var(--bg-input);border-radius:6px;overflow:hidden;flex-shrink:0}
+.edr-qty-stepper .edr-qty{background:none;width:34px;flex:0 0 34px;padding:7px 0}
+.qty-btn{width:28px;height:100%;padding:7px 0;font-size:15px;font-weight:600;color:var(--text-secondary);background:none;border:none;flex-shrink:0}
+.qty-btn:active{background:var(--border-mid)}
+.edr-wtotal{font-size:13px;font-weight:600;color:var(--text);flex-shrink:0;min-width:54px;text-align:right}

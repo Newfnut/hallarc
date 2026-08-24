@@ -415,3 +415,4 @@ body{display:flex;justify-content:center;background:var(--bg)}
 .edr-qty-stepper .edr-qty{background:none;width:34px;flex:0 0 34px;padding:7px 0}
 .qty-btn{width:28px;height:100%;padding:7px 0;font-size:15px;font-weight:600;color:var(--text-secondary);background:none;border:none;flex-shrink:0}
 .qty-btn:active{background:var(--border-mid)}
+.edr-inp[type="date"]{width:100%;min-width:0;box-sizing:border-box;-webkit-appearance:none;appearance:none}
