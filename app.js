@@ -763,16 +763,6 @@ function renderEditor() {
       </select>
     </div>
 
-    <div class="edr-row">
-      <span class="edr-lbl">Notes</span>
-      <input class="edr-inp" id="e-notes" type="text" value="${esc(item.notes||'')}" placeholder="Any details…">
-    </div>
-
-    <div class="edr-row edr-row-tog">
-      <span class="edr-lbl">Priced by weight</span>
-      <div class="tog${isWeight?' on':''}" id="weight-tog"></div>
-    </div>
-
     <div id="each-section" style="${isWeight?'display:none':''}">
       <div class="edr-row">
         <span class="edr-lbl">Price / item</span>
@@ -784,10 +774,6 @@ function renderEditor() {
             <button type="button" class="qty-btn" id="e-qty-inc" aria-label="Increase quantity">+</button>
           </div>
         </div>
-      </div>
-      <div class="edr-row">
-        <span class="edr-lbl">Pack size</span>
-        <input class="edr-inp" id="e-packsize" type="text" value="${esc(item.packSize||'')}" placeholder="e.g. 906 g, 1.5 kg, 12 ct" autocorrect="off">
       </div>
     </div>
 
@@ -808,6 +794,21 @@ function renderEditor() {
         <span class="edr-wtotal" id="e-wtotal"></span>
       </div>
       <div class="w-equiv" id="e-w-equiv" style="padding:0 2px 6px"></div>
+    </div>
+
+    <div class="edr-row edr-row-tog">
+      <span class="edr-lbl">Priced by weight</span>
+      <div class="tog${isWeight?' on':''}" id="weight-tog"></div>
+    </div>
+
+    <div class="edr-row">
+      <span class="edr-lbl">Pack size</span>
+      <input class="edr-inp" id="e-packsize" type="text" value="${esc(item.packSize||'')}" placeholder="e.g. 906 g, 1.5 kg, 12 ct" autocorrect="off">
+    </div>
+
+    <div class="edr-row">
+      <span class="edr-lbl">Notes</span>
+      <input class="edr-inp" id="e-notes" type="text" value="${esc(item.notes||'')}" placeholder="Any details…">
     </div>
 
   </div>
