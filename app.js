@@ -1517,7 +1517,9 @@ async function doCompleteTrip(){
     const batch=writeBatch(db);
     S.items.forEach(item=>{
       const locked=effPrice(item);
-      batch.update(doc(db,`households/${S.householdId}/trips/${S.trip.id}/items/${item.id}`),{lockedPrice:locked});
+      const upd={lockedPrice:locked};
+      if(item.photoData) upd.photoData=null;
+      batch.update(doc(db,`households/${S.householdId}/trips/${S.trip.id}/items/${item.id}`),upd);
     });
     await batch.commit();
   } catch(e){ console.error('Price lock failed',e); }
@@ -1662,7 +1664,7 @@ function bindEditor(){
   const _pi=q('e-photo-input');
   if(_pi) _pi.addEventListener('change',async e=>{
     const file=e.target.files?.[0]; if(!file) return;
-    const data=await compressImage(file,65000); if(!data) return;
+    const data=await compressImage(file,350000); if(!data) return;
     S.editorItem.photoData=data;
     const img=q('e-photo-img'); if(img) img.src=data;
     const prev=q('e-photo-preview'); if(prev) prev.style.display='';
@@ -1893,6 +1895,9 @@ async function doDeleteItem(){
 
 // ─── Item interactions ────────────────────────
 function bindItemInteractions(){
+  qAll('.item-photo-thumb').forEach(img=>{
+    img.addEventListener('click',e=>{ e.stopPropagation(); openPhotoLightbox(img.src); });
+  });
   qAll('.item-row').forEach(row=>{
     const iid=row.dataset.iid; if(!iid) return;
     const wrap=row.closest('.item-wrap');
@@ -2359,17 +2364,24 @@ function compressImage(file,maxBytes){
     img.onload=()=>{
       URL.revokeObjectURL(url);
       const canvas=document.createElement('canvas');
-      let w=img.width,h=img.height,maxW=270,maxH=480;
+      let w=img.width,h=img.height,maxW=1000,maxH=1400;
       if(w>maxW||h>maxH){ const rs=Math.min(maxW/w,maxH/h); w=Math.round(w*rs); h=Math.round(h*rs); }
       canvas.width=w; canvas.height=h;
       canvas.getContext('2d').drawImage(img,0,0,w,h);
-      let q=0.75,data='';
+      let q=0.85,data='';
       do{data=canvas.toDataURL('image/jpeg',q);q-=0.1;}while(data.length>maxBytes&&q>0.1);
       resolve(data);
     };
     img.onerror=()=>resolve(null);
     img.src=url;
   });
+}
+function openPhotoLightbox(src){
+  const ov=document.createElement('div');
+  ov.className='photo-lightbox';
+  ov.innerHTML=`<img src="${src}" alt="">`;
+  ov.addEventListener('click',()=>ov.remove());
+  document.body.appendChild(ov);
 }
 function todayStr(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 function fmtDate(d){ if(!d) return ''; return new Date(d+'T12:00:00').toLocaleDateString('en-CA',{weekday:'short',month:'short',day:'numeric'}); }
