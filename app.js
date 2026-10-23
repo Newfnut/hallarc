@@ -661,9 +661,10 @@ function rowHTML(item, dim=false, isStoreWl=false) {
   const effUnit   = effPrice(item);
   const hasSale   = item.saleDiscount>0 && saleActive(item);
 
-  // Total displayed price = unit price × qty for weight items
-  const displayEff  = isWeight ? effUnit*(item.qty||1) : effUnit;
-  const displayBase = isWeight ? (item.price||0)*(item.qty||1) : (item.price||0);
+  const qtyN = item.qty||1;
+  // Line total = unit price × qty (each and weight items)
+  const displayEff  = effUnit*qtyN;
+  const displayBase = (item.price||0)*qtyN;
 
   let saleExpiryStr='', saleExpiringSoon=false;
   if(hasSale&&item.saleExpiry){
@@ -687,7 +688,8 @@ function rowHTML(item, dim=false, isStoreWl=false) {
     }
   }
 
-  const qtyLabel = isWeight ? `${item.qty||1} ${unitLabel}` : (item.qty>1||item.qty<1?`×${item.qty}`:'');
+  const showPill = !isWeight && qtyN!==1;
+  const qtyLabel = isWeight ? `${qtyN} ${unitLabel}` : (showPill && effUnit>0 ? `$${effUnit.toFixed(2)} ea` : '');
 
   let priceHTML='';
   if(hasSale){
@@ -713,7 +715,7 @@ function rowHTML(item, dim=false, isStoreWl=false) {
       <div class="item-circle"></div>
 
       <div class="item-body">
-        <div class="item-nm">${item.name}</div>
+        <div class="item-nm"><span class="item-nm-txt">${item.name}</span>${showPill?`<span class="qty-pill">×${qtyN}</span>`:''}</div>
         ${isStoreWl&&item.category?`<div class="item-detail" style="color:var(--text-secondary);font-style:italic">${item.category}</div>`:`<div class="item-detail">${item.packSize||''}${item.notes?(item.packSize?' · ':'')+item.notes:''}</div>`}
         ${unitDual?`<div class="unit-both">${unitDual}</div>`:''}
         ${hasSale?`<div class="sale-tag${saleExpiringSoon?' expiring':''}">SALE −$${item.saleDiscount.toFixed(2)}${saleExpiryStr?` <span style="font-weight:400;opacity:.8">${saleExpiryStr}</span>`:''}</div>`:''}
