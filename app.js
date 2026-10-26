@@ -880,7 +880,8 @@ function renderEditor() {
 let _rxRefill=false;
 
 function rxDetail(rx,showFor){
-  return esc([showFor?rx.forWho:'',rx.size,rx.count?rx.count+' tabs':'',rx.filledAt].filter(Boolean).join(' · '));
+  const line=esc([showFor?rx.forWho:'',rx.size,rx.count?rx.count+' tabs':'',rx.filledAt].filter(Boolean).join(' · '));
+  return rx.purpose?`${line}${line?'<br>':''}Used for: ${esc(rx.purpose)}`:line;
 }
 
 function rxRefillTag(rx){
@@ -920,6 +921,9 @@ function renderRxEditor() {
     <div class="fg" style="max-width:120px"><label class="fg-label">Tablet count</label>
       <input class="finput" id="rx-count" type="text" inputmode="numeric" pattern="[0-9]*" value="${v(rx.count)}" placeholder="30" onfocus="this.select()" style="text-align:center"></div>
   </div>
+
+  <div class="fg"><label class="fg-label">What it's for</label>
+    <input class="finput" id="rx-purpose" type="text" value="${esc(rx.purpose||'')}" placeholder="Why it was prescribed" autocapitalize="sentences"></div>
 
   <div class="rx-sec">Where and who</div>
   <div class="fg" style="margin-top:8px"><label class="fg-label">Filled at</label>
@@ -996,7 +1000,7 @@ function readRxForm(){
   const cost=num('rx-cost'), fee=num('rx-fee'), coverage=num('rx-cov');
   const total=+(cost+fee).toFixed(2);
   return {
-    forWho:txt('rx-for'), size:txt('rx-size'), count:Math.round(num('rx-count'))||null,
+    forWho:txt('rx-for'), purpose:txt('rx-purpose'), size:txt('rx-size'), count:Math.round(num('rx-count'))||null,
     filledAt:txt('rx-place'), doctor:txt('rx-doctor'), datePrescribed:q('rx-date')?.value||null,
     cost, fee, total, coverage, patientPays:+Math.max(0,total-coverage).toFixed(2), cashPrice:num('rx-cash'),
     refillable:_rxRefill,
