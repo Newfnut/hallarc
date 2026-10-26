@@ -31,6 +31,10 @@ const TEMPLATES = {
     label: 'Supermarket (SuperStore style)', icon: '🛒',
     categories: ['Produce','Deli & Bakery','Meat & Seafood','Dairy & Eggs','Frozen Foods','Aisle 1 — Canned Goods & Soups','Aisle 2 — Pasta, Rice & Sauces','Aisle 3 — Breakfast & Cereal','Aisle 4 — Baking & Spices','Aisle 5 — Snacks & Chips','Aisle 6 — Beverages','Aisle 7 — International Foods','Household & Cleaning','Pharmacy & Health','Watchlist']
   },
+  prescription: {
+    label: 'Prescriptions', icon: '💊',
+    categories: ['General','Watchlist']
+  },
   custom: {
     label: 'Custom store', icon: '🏬',
     categories: ['General','Watchlist']
@@ -263,6 +267,7 @@ function renderHome() {
   const storesOpen = localStorage.getItem('storesOpen') !== 'false';
   const activeTrips = S.trips.filter(t=>t.status==='active')
     .sort((a,b)=>{
+      if(!!a.pinned!==!!b.pinned) return a.pinned?1:-1;
       const d=(a.tripDate||'').localeCompare(b.tripDate||'');
       return d!==0 ? d : (a.storeName||'').localeCompare(b.storeName||'');
     });
@@ -298,7 +303,7 @@ function renderHome() {
             <div class="trip-icon" style="background:${bg}">${storeIconHTML(ts)}</div>
             <div class="trip-info">
               <div class="trip-nm">${t.storeName}</div>
-              <div class="trip-meta">${fmtDate(t.tripDate)}${t.label?' · '+t.label:''} · ${t.itemCount||0} item${t.itemCount!==1?'s':''}</div>
+              <div class="trip-meta">${t.pinned?'Ongoing':fmtDate(t.tripDate)}${t.label?' · '+t.label:''} · ${t.itemCount||0} item${t.itemCount!==1?'s':''}</div>
             </div>
             <div class="trip-total">
               <div class="trip-amt" style="color:${txt}">$${(t.totalActive||0).toFixed(2)}</div>
@@ -354,6 +359,7 @@ function renderHome() {
         <div class="type-opt sel" data-type="warehouse"><span class="type-opt-ic">🏪</span><span class="type-opt-lbl">Warehouse</span></div>
         <div class="type-opt" data-type="supermarket"><span class="type-opt-ic">🛒</span><span class="type-opt-lbl">Supermarket</span></div>
         <div class="type-opt" data-type="custom"><span class="type-opt-ic">🏬</span><span class="type-opt-lbl">Custom</span></div>
+        <div class="type-opt" data-type="prescription"><span class="type-opt-ic">💊</span><span class="type-opt-lbl">Prescription</span></div>
       </div>
       <div class="fg" style="margin-bottom:4px"><label class="fg-label">Colour</label></div>
       <div class="color-swatches" id="new-store-colors">${colorSwatchesHTML('green')}</div>
@@ -493,13 +499,20 @@ function renderTrip() {
 
   const cats = (store.categories||[]).filter(c=>c!=='Watchlist');
   const items = S.items;
-  const uncat    = items.filter(i=>!i.checked&&(!i.category||!store.categories.includes(i.category))&&!i.isWatchlist);
+  const isRx = store.type==='prescription';
+  const uncat    = isRx ? [] : items.filter(i=>!i.checked&&(!i.category||!store.categories.includes(i.category))&&!i.isWatchlist);
   const checked  = items.filter(i=>i.checked);
   const catMap   = {};
   cats.forEach(c=>{
-    const ci=items.filter(i=>!i.checked&&i.category===c&&!i.isWatchlist);
+    const ci=isRx?[]:items.filter(i=>!i.checked&&i.category===c&&!i.isWatchlist);
     if(ci.length) catMap[c]=ci;
   });
+  if(isRx){
+    items.filter(i=>!i.checked&&!i.isWatchlist).forEach(i=>{
+      const k=(i.rx?.forWho||'').trim()||'Unassigned';
+      (catMap[k]=catMap[k]||[]).push(i);
+    });
+  }
   // Legacy: trip items still flagged isWatchlist (pre-migration) stay visible
   const legacyWlItems = items.filter(i=>!i.checked&&i.isWatchlist);
   const wlItems = [...S.watchlistItems, ...legacyWlItems];
@@ -513,7 +526,7 @@ function renderTrip() {
       <button class="ico-btn" id="t-back" style="font-size:22px">‹</button>
       <div style="flex:1;min-width:0">
         <div class="hdr-title">${trip.storeName}</div>
-        <div class="hdr-sub" id="t-date-lbl" style="cursor:pointer">${fmtDate(trip.tripDate)}${trip.label?' · '+trip.label:''} <span style="font-size:10px;opacity:.45">✏️</span></div>
+        <div class="hdr-sub" id="t-date-lbl" style="cursor:pointer">${trip.pinned?'Ongoing':fmtDate(trip.tripDate)}${trip.label?' · '+trip.label:''} <span style="font-size:10px;opacity:.45">✏️</span></div>
       </div>
       <button class="ico-btn" id="t-theme">${S.theme==='dark'?'☀️':'🌙'}</button>
       <button class="ico-btn" id="t-regulars" title="Regular items" style="font-size:16px">⭐</button>
@@ -556,7 +569,7 @@ function renderTrip() {
       ${wlItems.length?`
         <div class="cat-sec">
           <div class="cat-hdr cat-watchlist" data-cat="__watch__">
-            <span class="cat-label">👁 Watchlist</span>
+            <span class="cat-label">${isRx?'👁 Future refills':'👁 Watchlist'}</span>
             <span class="cat-badge">${wlItems.length}</span>
             <span class="cat-chev open">›</span>
           </div>
@@ -716,7 +729,7 @@ function rowHTML(item, dim=false, isStoreWl=false) {
 
       <div class="item-body">
         <div class="item-nm"><span class="item-nm-txt">${item.name}</span>${showPill?`<span class="qty-pill">×${qtyN}</span>`:''}</div>
-        ${isStoreWl&&item.category?`<div class="item-detail" style="color:var(--text-secondary);font-style:italic">${item.category}</div>`:`<div class="item-detail">${item.packSize||''}${item.notes?(item.packSize?' · ':'')+item.notes:''}</div>`}
+        ${isStoreWl&&item.category?`<div class="item-detail" style="color:var(--text-secondary);font-style:italic">${item.category}</div>`:`<div class="item-detail">${item.rx?rxDetail(item.rx,dim||item.checked):`${item.packSize||''}${item.notes?(item.packSize?' · ':'')+item.notes:''}`}</div>${item.rx?rxRefillTag(item.rx):''}`}
         ${unitDual?`<div class="unit-both">${unitDual}</div>`:''}
         ${hasSale?`<div class="sale-tag${saleExpiringSoon?' expiring':''}">SALE −$${item.saleDiscount.toFixed(2)}${saleExpiryStr?` <span style="font-weight:400;opacity:.8">${saleExpiryStr}</span>`:''}</div>`:''}
     
@@ -732,6 +745,7 @@ function rowHTML(item, dim=false, isStoreWl=false) {
 
 // ─── Item Editor ──────────────────────────────
 function renderEditor() {
+  if(S.store?.type==='prescription') return renderRxEditor();
   const item = S.editorItem||{};
   const cats = (S.store?.categories||[]).filter(c=>c!=='Watchlist');
   const isWeight = item.priceType==='per_lb'||item.priceType==='per_kg';
@@ -862,6 +876,148 @@ function renderEditor() {
   <button class="btn-main" id="e-save">${S.editorMode==='add'?'Add to List':'Save Changes'}</button>
   <div style="height:8px"></div>`;
 }
+// ─── Prescription store helpers ───────────────
+let _rxRefill=false;
+
+function rxDetail(rx,showFor){
+  return esc([showFor?rx.forWho:'',rx.size,rx.count?rx.count+' tabs':'',rx.filledAt].filter(Boolean).join(' · '));
+}
+
+function rxRefillTag(rx){
+  if(!rx||!rx.refillable) return '';
+  const left=rx.refillsLeft||0;
+  let warn=left<=0, txt=`${left} refill${left!==1?'s':''} left`;
+  if(rx.refillExpiry){
+    const days=Math.round((new Date(rx.refillExpiry+'T12:00:00')-new Date(todayStr()+'T12:00:00'))/86400000);
+    if(days<0){ warn=true; txt+=' · expired'; }
+    else { if(days<=30) warn=true; txt+=` · exp ${fmtShort(rx.refillExpiry)}`; }
+  }
+  return `<div class="rx-tag${warn?' warn':''}">${txt}</div>`;
+}
+
+function renderRxEditor() {
+  const item=S.editorItem||{}, rx=item.rx||{};
+  const v=x=>(x>0?x:'');
+  const names=[...new Set([...S.items,...S.watchlistItems].map(i=>i.rx?.forWho).filter(Boolean))];
+  return `
+  <div style="height:20px"></div>
+  <div class="sheet-handle"></div>
+  <div class="sheet-hdr-row">
+    <div style="flex:1;font-size:17px;font-weight:600">${S.editorMode==='add'?'Add prescription':'Edit prescription'}</div>
+    ${S.editorMode==='edit'?`<button class="ico-btn" id="e-del" style="color:var(--danger);font-size:20px">🗑</button>`:''}
+    <button class="ico-btn" id="e-save-top" style="color:var(--accent);font-size:20px">✅</button>
+  </div>
+
+  <div class="fg"><label class="fg-label">For</label>
+    <input class="finput" id="rx-for" type="text" value="${esc(rx.forWho||'')}" placeholder="e.g. Gary" autocorrect="off" autocapitalize="words">
+    ${names.length?`<div class="rx-chips">${names.map(n=>`<button type="button" class="rx-chip" data-rxfor="${esc(n)}">${esc(n)}</button>`).join('')}</div>`:''}
+  </div>
+  <div class="fg"><label class="fg-label">Medication name</label>
+    <input class="finput" id="e-name" type="text" value="${esc(item.name||'')}" placeholder="e.g. Amoxicillin" autocorrect="off" autocapitalize="words"></div>
+  <div class="frow">
+    <div class="fg"><label class="fg-label">Strength / size</label>
+      <input class="finput" id="rx-size" type="text" value="${esc(rx.size||'')}" placeholder="500 mg" autocorrect="off"></div>
+    <div class="fg" style="max-width:120px"><label class="fg-label">Tablet count</label>
+      <input class="finput" id="rx-count" type="text" inputmode="numeric" pattern="[0-9]*" value="${v(rx.count)}" placeholder="30" onfocus="this.select()" style="text-align:center"></div>
+  </div>
+
+  <div class="rx-sec">Where and who</div>
+  <div class="fg" style="margin-top:8px"><label class="fg-label">Filled at</label>
+    <input class="finput" id="rx-place" type="text" value="${esc(rx.filledAt||'')}" placeholder="e.g. Shoppers, Langley" autocapitalize="words"></div>
+  <div class="frow">
+    <div class="fg"><label class="fg-label">Prescribed by</label>
+      <input class="finput" id="rx-doctor" type="text" value="${esc(rx.doctor||'')}" placeholder="Dr. Smith" autocapitalize="words"></div>
+    <div class="fg"><label class="fg-label">Date prescribed</label>
+      <input class="finput" id="rx-date" type="date" value="${rx.datePrescribed||''}"></div>
+  </div>
+
+  <div class="rx-sec">Price breakdown</div>
+  <div class="frow">
+    <div class="fg" style="margin-top:8px"><label class="fg-label">Cost</label>
+      <input class="finput" id="rx-cost" type="text" inputmode="decimal" value="${v(rx.cost)}" placeholder="0.00" onfocus="this.select()"></div>
+    <div class="fg" style="margin-top:8px"><label class="fg-label">Fee</label>
+      <input class="finput" id="rx-fee" type="text" inputmode="decimal" value="${v(rx.fee)}" placeholder="0.00" onfocus="this.select()"></div>
+  </div>
+  <div class="fg"><div class="rx-calc"><div>Total<small>Cost + fee</small></div><span id="rx-total">$0.00</span></div></div>
+  <div class="fg"><label class="fg-label">Coverage</label>
+    <input class="finput" id="rx-cov" type="text" inputmode="decimal" value="${v(rx.coverage)}" placeholder="0.00" onfocus="this.select()"></div>
+  <div class="fg"><div class="rx-calc pays"><div>Patient pays<small>Total − coverage</small></div><span id="rx-pays">$0.00</span></div></div>
+  <div class="fg"><label class="fg-label">Cash price (no insurance)</label>
+    <input class="finput" id="rx-cash" type="text" inputmode="decimal" value="${v(rx.cashPrice)}" placeholder="0.00" onfocus="this.select()"></div>
+
+  <div class="rx-sec">Refills</div>
+  <div class="tog-row" style="margin-top:6px">
+    <div class="tog-info"><div class="tog-lbl">Refillable</div><div class="tog-sub">Track refills left and expiry</div></div>
+    <div class="tog${rx.refillable?' on':''}" id="rx-refill-tog"></div>
+  </div>
+  <div id="rx-refill-fields" style="${rx.refillable?'':'display:none'}">
+    <div class="frow">
+      <div class="fg"><label class="fg-label">Refills left</label>
+        <input class="finput" id="rx-refills" type="text" inputmode="numeric" pattern="[0-9]*" value="${v(rx.refillsLeft)}" placeholder="0" onfocus="this.select()"></div>
+      <div class="fg"><label class="fg-label">Expires</label>
+        <input class="finput" id="rx-exp" type="date" value="${rx.refillExpiry||''}"></div>
+    </div>
+  </div>
+  <div class="tog-row">
+    <div class="tog-info"><div class="tog-lbl">Future refill</div><div class="tog-sub">Greyed out, not in total. Swipe right to add to list</div></div>
+    <div class="tog${item.isWatchlist?' on':''}" id="wl-tog"></div>
+  </div>
+
+  <button class="btn-main" id="e-save">${S.editorMode==='add'?'Add to List':'Save Changes'}</button>
+  <div style="height:8px"></div>`;
+}
+
+function bindRxEditor(){
+  _rxRefill=!!S.editorItem?.rx?.refillable;
+  const calc=()=>{
+    const num=id=>parseFloat(q(id)?.value)||0;
+    const total=num('rx-cost')+num('rx-fee');
+    const pays=Math.max(0,total-num('rx-cov'));
+    if(q('rx-total')) q('rx-total').textContent='$'+total.toFixed(2);
+    if(q('rx-pays')) q('rx-pays').textContent='$'+pays.toFixed(2);
+  };
+  ['rx-cost','rx-fee','rx-cov'].forEach(id=>q(id)?.addEventListener('input',calc));
+  calc();
+  on('rx-refill-tog','click',()=>{
+    _rxRefill=!_rxRefill;
+    q('rx-refill-tog').classList.toggle('on',_rxRefill);
+    const f=q('rx-refill-fields'); if(f) f.style.display=_rxRefill?'':'none';
+    haptic('light');
+  });
+  qAll('.rx-chip').forEach(c=>c.addEventListener('click',()=>{
+    const i=q('rx-for'); if(i) i.value=c.dataset.rxfor;
+    haptic('light');
+  }));
+}
+
+function readRxForm(){
+  const num=id=>parseFloat(q(id)?.value)||0;
+  const txt=id=>(q(id)?.value||'').trim();
+  const cost=num('rx-cost'), fee=num('rx-fee'), coverage=num('rx-cov');
+  const total=+(cost+fee).toFixed(2);
+  return {
+    forWho:txt('rx-for'), size:txt('rx-size'), count:Math.round(num('rx-count'))||null,
+    filledAt:txt('rx-place'), doctor:txt('rx-doctor'), datePrescribed:q('rx-date')?.value||null,
+    cost, fee, total, coverage, patientPays:+Math.max(0,total-coverage).toFixed(2), cashPrice:num('rx-cash'),
+    refillable:_rxRefill,
+    refillsLeft:_rxRefill?Math.round(num('rx-refills')):0,
+    refillExpiry:_rxRefill?(q('rx-exp')?.value||null):null
+  };
+}
+
+async function openRxTrip(store){
+  const existing=S.trips.find(t=>t.status==='active'&&t.storeId===store.id);
+  if(existing){
+    if(DEV){ S.trip=existing; S.store=store; S.items=[]; go('trip'); }
+    else loadTrip(existing.id);
+    return;
+  }
+  const base={storeId:store.id,storeName:store.name,storeType:store.type,tripDate:todayStr(),label:'',pinned:true,status:'active',totalActive:0,totalChecked:0,itemCount:0};
+  if(DEV){ const t={id:'t-'+Date.now(),...base}; S.trips.push(t); S.trip=t; S.store=store; S.items=[]; go('trip'); return; }
+  const ref=await addDoc(col('trips'),{...base,createdAt:serverTimestamp()});
+  loadTrip(ref.id);
+}
+
 // ─── History screen ───────────────────────────
 function renderHistory() {
   const trips=S.histTrips.slice().sort((a,b)=>(b.completedAt?.seconds||b.createdAt?.seconds||0)-(a.completedAt?.seconds||a.createdAt?.seconds||0));
@@ -1043,6 +1199,7 @@ function bindHome() {
       clearTimeout(lpt); lpt=null; haptic('light');
       S.selectedStoreForTrip=S.stores.find(s=>s.id===el.dataset.sid);
       if(!S.selectedStoreForTrip) return;
+      if(S.selectedStoreForTrip.type==='prescription'){ openRxTrip(S.selectedStoreForTrip); return; }
       q('date-sheet-title').textContent=`New trip to ${S.selectedStoreForTrip.name}`;
       openSheet('date-sheet');
     });
@@ -1411,6 +1568,11 @@ function bindTrip(){
 }
 
 async function doQuickAdd(){
+  if(S.store?.type==='prescription'){
+    const _v=q('t-add')?.value.trim();
+    if(_v){ q('t-add').value=''; if(q('ac')) q('ac').style.display='none'; openEditor('add',{name:cap(_v)}); }
+    return;
+  }
   const inp=q('t-add'); if(!q('ac')) return;
   const val=inp.value.trim(); if(!val) return;
   inp.value=''; q('ac').style.display='none';
@@ -1649,6 +1811,7 @@ function bindEditor(){
   _reg=S.editorItem?.isRegular||false;
   _wt=(S.editorItem?.priceType==='per_kg')?'per_kg':'per_lb';
 
+  if(S.store?.type==='prescription') bindRxEditor();
   on('e-save-top','click',doSaveItem);
   on('sale-tog','click',()=>{ _sale=!_sale; q('sale-tog').classList.toggle('on',_sale); const sf=q('sale-fields'); if(sf) sf.style.display=_sale?'block':'none'; haptic('light'); updateDiscLabel(); updateSaleHint(); });
   on('wl-tog','click',()=>{ _wl=!_wl; q('wl-tog').classList.toggle('on',_wl); haptic('light'); });
@@ -1805,6 +1968,11 @@ async function doSaveItem(){
   const exp=_sale?(q('e-exp')?.value||null):null;
   const photoData=S.editorItem?.photoData||null;
   const baseData={name,category:cat,qty:finalQty,unit:'ea',packSize,priceType:finalPriceType,price:finalPrice,saleDiscount:disc,saleExpiry:exp,notes,isRegular:_reg,photoData};
+  if(S.store?.type==='prescription'){
+    const rxd=readRxForm();
+    baseData.rx=rxd; baseData.price=rxd.patientPays; baseData.priceType='each';
+    baseData.qty=1; baseData.packSize=rxd.size; baseData.category='';
+  }
   haptic('medium');
 
   const isStoreWl=S.editorItem?.isStoreWl||false;
@@ -2127,6 +2295,40 @@ async function doMoveToList(targetTripId){
   closeSheets();
 }
 
+async function doAddWatchlistToTrip(iid){
+  const w=S.watchlistItems.find(i=>i.id===iid); if(!w) return;
+  haptic('medium');
+  const {id,isStoreWl,createdAt,...rest}=w;
+  const data={...rest,isWatchlist:false,checked:false,sortOrder:Date.now()};
+  let newRx=null;
+  if(w.rx?.refillable){
+    newRx={...w.rx,refillsLeft:Math.max(0,(w.rx.refillsLeft||0)-1)};
+    data.rx=newRx;
+  }
+  if(DEV){
+    if(newRx){ const idx=S.watchlistItems.findIndex(i=>i.id===iid); if(idx>=0) S.watchlistItems[idx]={...S.watchlistItems[idx],rx:newRx}; }
+    S.items.push({id:'dev-'+Date.now(),...data}); renderTripContent(); return;
+  }
+  await addDoc(itemsCol(),{...data,createdAt:serverTimestamp()});
+  if(newRx) await updateDoc(doc(db,`households/${S.householdId}/stores/${S.store.id}/watchlist/${iid}`),{rx:newRx});
+  recalcTotals();
+}
+
+async function doMoveToWatchlist(iid){
+  const item=S.items.find(i=>i.id===iid); if(!item) return;
+  haptic('medium');
+  const {id,checked,createdAt,sortOrder,lockedPrice,...rest}=item;
+  const wlData={...rest,isWatchlist:true,checked:false};
+  if(DEV){
+    S.items=S.items.filter(i=>i.id!==iid);
+    S.watchlistItems.push({id:'dev-wl-'+Date.now(),...wlData,isStoreWl:true});
+    renderTripContent(); return;
+  }
+  await addDoc(collection(db,`households/${S.householdId}/stores/${S.store.id}/watchlist`),{...wlData,createdAt:serverTimestamp()});
+  await deleteDoc(doc(db,`households/${S.householdId}/trips/${S.trip.id}/items/${iid}`));
+  recalcTotals();
+}
+
 async function doToggleCheck(iid){
   const item=S.items.find(i=>i.id===iid); if(!item) return;
   haptic('medium');
@@ -2153,7 +2355,7 @@ function openEditor(mode,item={}){
   inner.innerHTML=renderEditor(); openSheet('editor-sheet');
   bindEditor();
   if (window.lucide) lucide.createIcons();
-  setTimeout(()=>q('e-name')?.focus(),380);
+  setTimeout(()=>q(S.store?.type==='prescription'&&mode==='add'?'rx-for':'e-name')?.focus(),380);
 }
 
 function renderTripContent(){
@@ -2388,9 +2590,9 @@ function openPhotoLightbox(src){
 function todayStr(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 function fmtDate(d){ if(!d) return ''; return new Date(d+'T12:00:00').toLocaleDateString('en-CA',{weekday:'short',month:'short',day:'numeric'}); }
 function fmtShort(d){ if(!d) return ''; return new Date(d+'T12:00:00').toLocaleDateString('en-CA',{month:'short',day:'numeric'}); }
-function storeIco(t){ return t==='warehouse'?'🏪':t==='supermarket'?'🛒':'🏬'; }
+function storeIco(t){ return t==='warehouse'?'🏪':t==='supermarket'?'🛒':t==='prescription'?'💊':'🏬'; }
 function lucideIconForStoreType(t){ return t==='warehouse'?'warehouse':t==='supermarket'?'shopping-cart':'store'; }
-function storeTypeLbl(t){ return t==='warehouse'?'Warehouse':t==='supermarket'?'Supermarket':'Custom'; }
+function storeTypeLbl(t){ return t==='warehouse'?'Warehouse':t==='supermarket'?'Supermarket':t==='prescription'?'Prescriptions':'Custom'; }
 function storeIconHTML(store){ if(store?.icon) return `<span style="font-size:22px">${store.icon}</span>`; return `<i data-lucide="${lucideIconForStoreType(store?.type)}" class="store-icon-lucide"></i>`; }
 function effPrice(item){ if(item.lockedPrice!=null) return item.lockedPrice; const b=item.price||0; if(!item.saleDiscount||!saleActive(item)) return b; return Math.max(0,b-item.saleDiscount); }
 function saleActive(item){ if(!item.saleExpiry) return(item.saleDiscount||0)>0; return new Date(item.saleExpiry+'T12:00:00')>=new Date(todayStr()+'T00:00:00'); }
