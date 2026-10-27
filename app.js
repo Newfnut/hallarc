@@ -737,7 +737,7 @@ function rowHTML(item, dim=false, isStoreWl=false) {
       ${item.photoData?`<img src="${item.photoData}" class="item-photo-thumb" alt="">`:''}
       <div class="item-right">
         ${priceHTML}
-        <div class="item-qty">${qtyLabel}</div>
+        <div class="item-qty">${item.rx?(item.rx.datePrescribed?new Date(item.rx.datePrescribed+'T12:00:00').toLocaleDateString('en-CA',{month:'short',day:'numeric',year:'numeric'}):''):qtyLabel}</div>
       </div>
     </div>
   </div>`;
@@ -918,8 +918,8 @@ function renderRxEditor() {
   <div class="frow">
     <div class="fg"><label class="fg-label">Strength / size</label>
       <input class="finput" id="rx-size" type="text" value="${esc(rx.size||'')}" placeholder="500 mg" autocorrect="off"></div>
-    <div class="fg" style="max-width:120px"><label class="fg-label">Tablet count</label>
-      <input class="finput" id="rx-count" type="text" inputmode="numeric" pattern="[0-9]*" value="${v(rx.count)}" placeholder="30" onfocus="this.select()" style="text-align:center"></div>
+    <div class="fg"><label class="fg-label">Tablet count</label>
+      <input class="finput" id="rx-count" type="text" inputmode="numeric" pattern="[0-9]*" value="${v(rx.count)}" placeholder="30" onfocus="this.select()"></div>
   </div>
 
   <div class="fg"><label class="fg-label">What it's for</label>
