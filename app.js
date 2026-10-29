@@ -198,6 +198,7 @@ const S = {
   watchlistItems: [],
   itemCacheAll: null,
   itemCacheLoaded: false,
+  rxWlOpen: false,
 };
 
 // ═══════════════════════════════════════════
@@ -214,7 +215,7 @@ setTheme(S.theme);
 // ═══════════════════════════════════════════
 // NAVIGATION
 // ═══════════════════════════════════════════
-function go(screen) { S.screen = screen; render(); }
+function go(screen) { if(screen!=='trip') S.rxWlOpen=false; S.screen = screen; render(); }
 
 // ═══════════════════════════════════════════
 // RENDER
@@ -571,9 +572,9 @@ function renderTrip() {
           <div class="cat-hdr cat-watchlist" data-cat="__watch__">
             <span class="cat-label">${isRx?'👁 Future refills':'👁 Watchlist'}</span>
             <span class="cat-badge">${wlItems.length}</span>
-            <span class="cat-chev open">›</span>
+            <span class="cat-chev${isRx&&!S.rxWlOpen?'':' open'}">›</span>
           </div>
-          <div class="cat-items-wrap" id="ci-__watch__">
+          <div class="cat-items-wrap" id="ci-__watch__" style="${isRx&&!S.rxWlOpen?'display:none':''}">
             ${S.watchlistItems.map(i=>rowHTML(i,true,true)).join('')}
             ${legacyWlItems.map(i=>rowHTML(i,true,false)).join('')}
           </div>
@@ -899,7 +900,8 @@ function rxRefillTag(rx){
 function renderRxEditor() {
   const item=S.editorItem||{}, rx=item.rx||{};
   const v=x=>(x>0?x:'');
-  const names=[...new Set([...S.items,...S.watchlistItems].map(i=>i.rx?.forWho).filter(Boolean))];
+    const names=[...new Set([...S.items,...S.watchlistItems].map(i=>i.rx?.forWho).filter(Boolean))];
+  const doctors=[...new Set([...(S.store?.rxDoctors||[]),...[...S.items,...S.watchlistItems].map(i=>i.rx?.doctor).filter(Boolean)])];
   return `
   <div style="height:20px"></div>
   <div class="sheet-handle"></div>
@@ -930,7 +932,8 @@ function renderRxEditor() {
     <input class="finput" id="rx-place" type="text" value="${esc(rx.filledAt||'')}" placeholder="e.g. Shoppers, Langley" autocapitalize="words"></div>
   <div class="frow">
     <div class="fg"><label class="fg-label">Prescribed by</label>
-      <input class="finput" id="rx-doctor" type="text" value="${esc(rx.doctor||'')}" placeholder="Dr. Smith" autocapitalize="words"></div>
+      <input class="finput" id="rx-doctor" type="text" list="rx-doctor-list" autocomplete="off" value="${esc(rx.doctor||'')}" placeholder="Dr. Smith" autocapitalize="words">
+      <datalist id="rx-doctor-list">${doctors.map(d=>`<option value="${esc(d)}"></option>`).join('')}</datalist></div>
     <div class="fg"><label class="fg-label">Date prescribed</label>
       <input class="finput" id="rx-date" type="date" value="${rx.datePrescribed||''}"></div>
   </div>
@@ -1561,7 +1564,7 @@ function bindTrip(){
   }
   qAll('.cat-hdr').forEach(h=>h.addEventListener('click',()=>{
     const id='ci-'+h.dataset.cat; const wrap=document.getElementById(id);
-    if(wrap){ const open=wrap.style.display!=='none'; wrap.style.display=open?'none':''; h.querySelector('.cat-chev').classList.toggle('open',!open); haptic('light'); }
+    if(wrap){ const open=wrap.style.display!=='none'; wrap.style.display=open?'none':''; h.querySelector('.cat-chev').classList.toggle('open',!open); if(h.dataset.cat==='__watch__') S.rxWlOpen=!open; haptic('light'); }
   }));
   bindItemInteractions();
   bindEditor();
@@ -1860,11 +1863,20 @@ function bindEditor(){
     haptic('light'); updateDiscLabel(); updateSaleHint(); updateWeightTotal();
   });
 
-  qAll('.wt-btn').forEach(b=>b.addEventListener('click',()=>{
-    qAll('.wt-btn').forEach(x=>x.classList.remove('sel'));
-    b.classList.add('sel'); _wt=b.dataset.pt; haptic('light');
-    updateWeightEquiv(); updateDiscLabel(); updateSaleHint(); updateWeightTotal();
-  }));
+  qAll('.wt-btn').forEach(b=>{
+    let moved=false;
+    const pick=e=>{
+      e.preventDefault();
+      qAll('.wt-btn').forEach(x=>x.classList.remove('sel'));
+      b.classList.add('sel'); _wt=b.dataset.pt; haptic('light');
+      updateWeightEquiv(); updateDiscLabel(); updateSaleHint(); updateWeightTotal();
+    };
+    b.addEventListener('mousedown',e=>e.preventDefault());
+    b.addEventListener('touchstart',()=>{ moved=false; },{passive:true});
+    b.addEventListener('touchmove',()=>{ moved=true; },{passive:true});
+    b.addEventListener('touchend',e=>{ if(!moved) pick(e); });
+    b.addEventListener('click',pick);
+  });
   const wPriceInp=q('e-wprice');
   const wQtyInp=q('e-wqty');
   if(wPriceInp){ wPriceInp.addEventListener('input',()=>{ updateWeightEquiv(); updateSaleHint(); updateDiscLabel(); updateWeightTotal(); }); }
@@ -1976,6 +1988,13 @@ async function doSaveItem(){
     const rxd=readRxForm();
     baseData.rx=rxd; baseData.price=rxd.patientPays; baseData.priceType='each';
     baseData.qty=1; baseData.packSize=rxd.size; baseData.category='';
+    const dr=(rxd.doctor||'').trim();
+    const known=S.store?.rxDoctors||[];
+    if(dr&&!known.some(d=>d.toLowerCase()===dr.toLowerCase())){
+      const next=[...known,dr];
+      S.store.rxDoctors=next;
+      if(!DEV) updateDoc(doc(db,`households/${S.householdId}/stores/${S.store.id}`),{rxDoctors:next}).catch(e=>console.error('Doctor save failed',e));
+    }
   }
   haptic('medium');
 
@@ -2366,8 +2385,10 @@ function renderTripContent(){
   const editorOpen=document.getElementById('editor-sheet')?.classList.contains('open');
   if(editorOpen){ S.tripNeedsUpdate=true; return; }
   const app=document.getElementById('app');
+  const prevScroll=document.getElementById('trip-scroll')?.scrollTop||0;
   app.innerHTML=renderTrip(); bindTrip();
   if (window.lucide) lucide.createIcons();
+  const sc=document.getElementById('trip-scroll'); if(sc) sc.scrollTop=prevScroll;
   S.tripNeedsUpdate=false;
 }
 
