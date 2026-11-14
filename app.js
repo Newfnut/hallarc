@@ -808,10 +808,6 @@ function renderEditor() {
       <div class="edr-row">
         <span class="edr-lbl" id="e-wqty-label">Weight</span>
         <input class="edr-inp edr-green edr-qty" id="e-wqty" type="number" value="${wQtyVal}" min="0" step="any" onfocus="this.select()" placeholder="0.0" style="text-align:center">
-        <div class="edr-wt-toggle">
-          <button type="button" class="wu-btn${wType==='per_lb'?' sel':''}" data-wu="per_lb">lb</button>
-          <button type="button" class="wu-btn${wType==='per_kg'?' sel':''}" data-wu="per_kg">kg</button>
-        </div>
         <span class="edr-wtotal" id="e-wtotal"></span>
       </div>
       <div class="w-equiv" id="e-w-equiv" style="padding:0 2px 6px"></div>
@@ -1814,14 +1810,14 @@ function setupRegSwipe(wrap,rid,rname,btn,regularsArr){
 }
 
 // ─── Editor bindings ─────────────────────────
-let _sale=false, _wl=false, _reg=false, _wt='per_lb', _wu='per_lb', _wuTouched=false, _saving=false;
+let _sale=false, _wl=false, _reg=false, _wt='per_lb', _wu='per_lb', _wuTouched=false, _wExact=null, _saving=false;
 
 function bindEditor(){
   _sale=(S.editorItem?.saleDiscount||0)>0;
   _wl=S.editorItem?.isWatchlist||false;
   _reg=S.editorItem?.isRegular||false;
   _wt=(S.editorItem?.priceType==='per_kg')?'per_kg':'per_lb';
-  _wu=_wt; _wuTouched=false;
+  _wu=_wt; _wuTouched=false; _wExact=null;
 
   if(S.store?.type==='prescription') bindRxEditor();
   on('e-save-top','click',doSaveItem);
@@ -1872,8 +1868,20 @@ function bindEditor(){
     let moved=false;
     const pick=e=>{
       e.preventDefault();
+      const next=b.dataset.pt;
+      if(next!==_wt){
+        const pi=q('e-wprice');
+        const cur=wPriceExact();
+        if(cur>0){
+          const conv=next==='per_kg' ? cur/0.453592 : cur*0.453592;
+          _wExact=conv;
+          if(pi) pi.value=conv.toFixed(2);
+        }
+        const di=q('e-disc'); const d=parseFloat(di?.value)||0;
+        if(di && d>0) di.value=(next==='per_kg' ? d/0.453592 : d*0.453592).toFixed(2);
+      }
       qAll('.wt-btn').forEach(x=>x.classList.remove('sel'));
-      b.classList.add('sel'); _wt=b.dataset.pt; haptic('light');
+      b.classList.add('sel'); _wt=next; haptic('light');
       updateWeightEquiv(); updateDiscLabel(); updateSaleHint(); updateWeightTotal();
     };
     b.addEventListener('mousedown',e=>e.preventDefault());
@@ -1897,7 +1905,7 @@ function bindEditor(){
   });
   const wPriceInp=q('e-wprice');
   const wQtyInp=q('e-wqty');
-  if(wPriceInp){ wPriceInp.addEventListener('input',()=>{ updateWeightEquiv(); updateSaleHint(); updateDiscLabel(); updateWeightTotal(); }); }
+  if(wPriceInp){ wPriceInp.addEventListener('input',()=>{ _wExact=null; updateWeightEquiv(); updateSaleHint(); updateDiscLabel(); updateWeightTotal(); }); }
   if(wQtyInp){  wQtyInp.addEventListener('input',()=>{ updateWeightEquiv(); updateSaleHint(); updateWeightTotal(); }); }
   const ePriceInp=q('e-price');
   if(ePriceInp){ ePriceInp.addEventListener('input',()=>{ updateSaleHint(); updateDiscLabel(); }); }
@@ -1911,6 +1919,11 @@ function bindEditor(){
     if(inp.tagName==='SELECT'||inp.type==='number'||inp.type==='date') return;
     inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); inp.blur(); setTimeout(()=>doSaveItem(),80); } });
   });
+}
+
+function wPriceExact(){
+  const t=parseFloat(q('e-wprice')?.value)||0;
+  return (_wExact!=null && Math.abs(_wExact-t)<0.006) ? _wExact : t;
 }
 
 function setWu(unit){
@@ -1929,7 +1942,7 @@ function updateWeightEquiv(){
   if(!_wuTouched) setWu(_wt);
   const el=q('e-w-equiv'); if(!el) return;
   const price=parseFloat(q('e-wprice')?.value)||0;
-  const lbl=q('e-wqty-label'); if(lbl) lbl.textContent='Weight';
+  const lbl=q('e-wqty-label'); if(lbl) lbl.textContent='Weight ('+(_wt==='per_kg'?'kg':'lb')+')';
   let txt='';
   if(price>0){
     txt=_wt==='per_lb'
@@ -1945,7 +1958,7 @@ function updateWeightEquiv(){
 
 function updateWeightTotal(){
   const el=q('e-wtotal'); if(!el) return;
-  const price=parseFloat(q('e-wprice')?.value)||0;
+  const price=wPriceExact();
   const wt=weightInPriceUnit(0);
   if(price<=0||wt<=0){ el.textContent=''; return; }
   el.textContent=`= $${(price*wt).toFixed(2)}`;
@@ -1999,7 +2012,7 @@ async function doSaveItem(){
 
   const eachPrice=parseFloat(q('e-price')?.value)||0;
   const eachQty=parseFloat(q('e-qty')?.value)||1;
-  const wPrice=parseFloat(q('e-wprice')?.value)||0;
+  const wPrice=Math.round(wPriceExact()*10000)/10000;
   const wQty=Math.round(weightInPriceUnit(1)*1000)/1000;
 
   // Conflict guard: if both filled, weight wins — this matches the hint shown in the editor
