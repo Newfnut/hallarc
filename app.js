@@ -1084,6 +1084,7 @@ function renderHistory() {
           <div style="font-size:12px;color:var(--text-secondary);margin-top:2px" id="hd-sub"></div>
         </div>
         <button class="ico-btn" id="hd-csv" title="Download CSV" style="font-size:17px">⬇️</button>
+        <button class="ico-btn" id="hd-reopen" title="Reopen trip" style="font-size:17px">↩️</button>
         <button class="ico-btn" id="hd-delete" title="Delete trip" style="color:var(--danger);font-size:16px">🗑</button>
         <button class="ico-btn" id="hd-close" style="font-size:14px;color:var(--text-secondary)">✕</button>
       </div>
@@ -1411,6 +1412,28 @@ function doDownloadCSV(){
   a.download = safeName + '.csv';
   a.click();
   URL.revokeObjectURL(url);
+}
+
+async function doReopenHistTrip(){
+  const trip=S.histDetailTrip; if(!trip) return;
+  if(!confirm(`Reopen the ${trip.storeName} trip from ${fmtDate(trip.tripDate)}?`)) return;
+  haptic('medium');
+  if(DEV){
+    S.trips.push({...trip,status:'active'});
+    S.histTrips=S.histTrips.filter(t=>t.id!==trip.id);
+    S.histDetailTrip=null; S.histDetailItems=[];
+    closeSheets(); go('home'); return;
+  }
+  try {
+    const itemsSnap=await getDocs(collection(db,`households/${S.householdId}/trips/${trip.id}/items`));
+    const batch=writeBatch(db);
+    itemsSnap.docs.forEach(d=>batch.update(d.ref,{lockedPrice:null}));
+    batch.update(doc(db,`households/${S.householdId}/trips/${trip.id}`),{status:'active',completedAt:null});
+    await batch.commit();
+  } catch(e){ console.error('Reopen failed',e); alert('Could not reopen the trip. Check your connection and try again.'); return; }
+  S.histTrips=S.histTrips.filter(t=>t.id!==trip.id);
+  S.histDetailTrip=null; S.histDetailItems=[];
+  closeSheets(); go('home');
 }
 
 async function doDeleteHistTrip(){
