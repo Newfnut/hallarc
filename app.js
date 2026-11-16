@@ -1296,6 +1296,7 @@ function bindHistory() {
   on('hist-back','click',()=>{haptic('light');go('home');});
   on('hist-theme','click',()=>{setTheme(S.theme==='dark'?'light':'dark');render();});
   on('hd-close','click',closeSheets);
+  on('hd-reopen','click',doReopenHistTrip);
   on('hd-csv','click',doDownloadCSV);
   on('hd-delete','click',doDeleteHistTrip);
   bindOverlayClose();
