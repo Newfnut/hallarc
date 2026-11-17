@@ -1378,11 +1378,14 @@ function doDownloadCSV(){
   const items = S.histDetailItems || [];
   if(!trip) return;
   haptic('light');
-  const rows = [['Name','Category','Pack Size','Qty','Unit','Price Type','Unit Price','Sale Discount','Effective Unit Price','Line Total','Notes','Checked']];
+  const rows = [['Date','Name','Category','Pack Size','Qty','Unit','Price Type','Price','Discount','Unit Price','Total Discount','Total','Notes','Checked']];
+  const dateStr = fmtShort(trip.tripDate);
   items.forEach(i => {
     const eff = effPrice(i);
+    const totalDisc = Math.max(0, (i.price || 0) - eff) * (i.qty || 1);
     const qty = i.qty || 1;
     rows.push([
+      dateStr,
       i.name,
       i.category || '',
       i.packSize || '',
@@ -1392,6 +1395,7 @@ function doDownloadCSV(){
       (i.price || 0).toFixed(2),
       (i.saleDiscount || 0).toFixed(2),
       eff.toFixed(2),
+      totalDisc.toFixed(2),
       (eff * qty).toFixed(2),
       i.notes || '',
       i.checked ? 'Yes' : 'No'
@@ -1399,11 +1403,11 @@ function doDownloadCSV(){
   });
   const checkedItems = items.filter(i => i.checked);
   const grandTotal = checkedItems.reduce((s,i) => s + effPrice(i)*(i.qty||1), 0);
-  const savings = items.reduce((s,i) => s + (i.saleDiscount && saleActive(i) ? i.saleDiscount*(i.qty||1) : 0), 0);
+  const savings = items.reduce((s,i) => s + Math.max(0, (i.price||0) - effPrice(i)) * (i.qty||1), 0);
   rows.push([]);
-  rows.push(['TOTAL SPENT','','','','','','','','','$'+grandTotal.toFixed(2),'','']);
-  if(savings > 0) rows.push(['TOTAL SAVINGS','','','','','','','','','$'+savings.toFixed(2),'','']);
-  rows.push(['Items checked','','','','','','','','',checkedItems.length+' / '+items.length,'','']);
+  rows.push(['','TOTAL SPENT',...Array(9).fill(''),'$'+grandTotal.toFixed(2),'','']);
+  if(savings > 0) rows.push(['','TOTAL SAVINGS',...Array(9).fill(''),'$'+savings.toFixed(2),'','']);
+  rows.push(['','Items checked',...Array(9).fill(''),checkedItems.length+' / '+items.length,'','']);
   const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob = new Blob([csv], {type:'text/csv'});
   const url = URL.createObjectURL(blob);
