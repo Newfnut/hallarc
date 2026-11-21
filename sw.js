@@ -1,4 +1,4 @@
-const CACHE = 'shopper-v13';
+const CACHE = 'shopper-v14';
 const BASE = '/hallarc';
 const PRECACHE = [BASE+'/', BASE+'/index.html', BASE+'/styles.css', BASE+'/app.js'];
 
