@@ -807,7 +807,7 @@ function renderEditor() {
       </div>
       <div class="edr-row">
         <span class="edr-lbl" id="e-wqty-label">Weight</span>
-        <input class="edr-inp edr-green edr-qty" id="e-wqty" type="number" value="${wQtyVal}" min="0" step="0.1" onfocus="this.select()" placeholder="0.0" style="text-align:center">
+        <input class="edr-inp edr-green edr-qty" id="e-wqty" type="number" value="${wQtyVal}" min="0" step="any" onfocus="this.select()" placeholder="0.0" style="text-align:center">
         <span class="edr-wtotal" id="e-wtotal"></span>
       </div>
       <div class="w-equiv" id="e-w-equiv" style="padding:0 2px 6px"></div>
@@ -1084,6 +1084,7 @@ function renderHistory() {
           <div style="font-size:12px;color:var(--text-secondary);margin-top:2px" id="hd-sub"></div>
         </div>
         <button class="ico-btn" id="hd-csv" title="Download CSV" style="font-size:17px">⬇️</button>
+        <button class="ico-btn" id="hd-reopen" title="Reopen trip" style="font-size:17px">↩️</button>
         <button class="ico-btn" id="hd-delete" title="Delete trip" style="color:var(--danger);font-size:16px">🗑</button>
         <button class="ico-btn" id="hd-close" style="font-size:14px;color:var(--text-secondary)">✕</button>
       </div>
@@ -1295,6 +1296,7 @@ function bindHistory() {
   on('hist-back','click',()=>{haptic('light');go('home');});
   on('hist-theme','click',()=>{setTheme(S.theme==='dark'?'light':'dark');render();});
   on('hd-close','click',closeSheets);
+  on('hd-reopen','click',doReopenHistTrip);
   on('hd-csv','click',doDownloadCSV);
   on('hd-delete','click',doDeleteHistTrip);
   bindOverlayClose();
@@ -1376,11 +1378,14 @@ function doDownloadCSV(){
   const items = S.histDetailItems || [];
   if(!trip) return;
   haptic('light');
-  const rows = [['Name','Category','Pack Size','Qty','Unit','Price Type','Unit Price','Sale Discount','Effective Unit Price','Line Total','Notes','Checked']];
+  const rows = [['Date','Name','Category','Pack Size','Qty','Unit','Price Type','Price','Discount','Unit Price','Total Discount','Total','Notes','Checked']];
+  const dateStr = fmtShort(trip.tripDate);
   items.forEach(i => {
     const eff = effPrice(i);
+    const totalDisc = Math.max(0, (i.price || 0) - eff) * (i.qty || 1);
     const qty = i.qty || 1;
     rows.push([
+      dateStr,
       i.name,
       i.category || '',
       i.packSize || '',
@@ -1390,6 +1395,7 @@ function doDownloadCSV(){
       (i.price || 0).toFixed(2),
       (i.saleDiscount || 0).toFixed(2),
       eff.toFixed(2),
+      totalDisc.toFixed(2),
       (eff * qty).toFixed(2),
       i.notes || '',
       i.checked ? 'Yes' : 'No'
@@ -1397,11 +1403,11 @@ function doDownloadCSV(){
   });
   const checkedItems = items.filter(i => i.checked);
   const grandTotal = checkedItems.reduce((s,i) => s + effPrice(i)*(i.qty||1), 0);
-  const savings = items.reduce((s,i) => s + (i.saleDiscount && saleActive(i) ? i.saleDiscount*(i.qty||1) : 0), 0);
+  const savings = items.reduce((s,i) => s + Math.max(0, (i.price||0) - effPrice(i)) * (i.qty||1), 0);
   rows.push([]);
-  rows.push(['TOTAL SPENT','','','','','','','','','$'+grandTotal.toFixed(2),'','']);
-  if(savings > 0) rows.push(['TOTAL SAVINGS','','','','','','','','','$'+savings.toFixed(2),'','']);
-  rows.push(['Items checked','','','','','','','','',checkedItems.length+' / '+items.length,'','']);
+  rows.push(['','TOTAL SPENT',...Array(9).fill(''),'$'+grandTotal.toFixed(2),'','']);
+  if(savings > 0) rows.push(['','TOTAL SAVINGS',...Array(9).fill(''),'$'+savings.toFixed(2),'','']);
+  rows.push(['','Items checked',...Array(9).fill(''),checkedItems.length+' / '+items.length,'','']);
   const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob = new Blob([csv], {type:'text/csv'});
   const url = URL.createObjectURL(blob);
@@ -1411,6 +1417,28 @@ function doDownloadCSV(){
   a.download = safeName + '.csv';
   a.click();
   URL.revokeObjectURL(url);
+}
+
+async function doReopenHistTrip(){
+  const trip=S.histDetailTrip; if(!trip) return;
+  if(!confirm(`Reopen the ${trip.storeName} trip from ${fmtDate(trip.tripDate)}?`)) return;
+  haptic('medium');
+  if(DEV){
+    S.trips.push({...trip,status:'active'});
+    S.histTrips=S.histTrips.filter(t=>t.id!==trip.id);
+    S.histDetailTrip=null; S.histDetailItems=[];
+    closeSheets(); go('home'); return;
+  }
+  try {
+    const itemsSnap=await getDocs(collection(db,`households/${S.householdId}/trips/${trip.id}/items`));
+    const batch=writeBatch(db);
+    itemsSnap.docs.forEach(d=>batch.update(d.ref,{lockedPrice:null}));
+    batch.update(doc(db,`households/${S.householdId}/trips/${trip.id}`),{status:'active',completedAt:null});
+    await batch.commit();
+  } catch(e){ console.error('Reopen failed',e); alert('Could not reopen the trip. Check your connection and try again.'); return; }
+  S.histTrips=S.histTrips.filter(t=>t.id!==trip.id);
+  S.histDetailTrip=null; S.histDetailItems=[];
+  closeSheets(); go('home');
 }
 
 async function doDeleteHistTrip(){
@@ -1810,13 +1838,14 @@ function setupRegSwipe(wrap,rid,rname,btn,regularsArr){
 }
 
 // ─── Editor bindings ─────────────────────────
-let _sale=false, _wl=false, _reg=false, _wt='per_lb', _saving=false;
+let _sale=false, _wl=false, _reg=false, _wt='per_lb', _wu='per_lb', _wuTouched=false, _wExact=null, _saving=false;
 
 function bindEditor(){
   _sale=(S.editorItem?.saleDiscount||0)>0;
   _wl=S.editorItem?.isWatchlist||false;
   _reg=S.editorItem?.isRegular||false;
   _wt=(S.editorItem?.priceType==='per_kg')?'per_kg':'per_lb';
+  _wu=_wt; _wuTouched=false; _wExact=null;
 
   if(S.store?.type==='prescription') bindRxEditor();
   on('e-save-top','click',doSaveItem);
@@ -1867,8 +1896,20 @@ function bindEditor(){
     let moved=false;
     const pick=e=>{
       e.preventDefault();
+      const next=b.dataset.pt;
+      if(next!==_wt){
+        const pi=q('e-wprice');
+        const cur=wPriceExact();
+        if(cur>0){
+          const conv=next==='per_kg' ? cur/0.453592 : cur*0.453592;
+          _wExact=conv;
+          if(pi) pi.value=conv.toFixed(2);
+        }
+        const di=q('e-disc'); const d=parseFloat(di?.value)||0;
+        if(di && d>0) di.value=(next==='per_kg' ? d/0.453592 : d*0.453592).toFixed(2);
+      }
       qAll('.wt-btn').forEach(x=>x.classList.remove('sel'));
-      b.classList.add('sel'); _wt=b.dataset.pt; haptic('light');
+      b.classList.add('sel'); _wt=next; haptic('light');
       updateWeightEquiv(); updateDiscLabel(); updateSaleHint(); updateWeightTotal();
     };
     b.addEventListener('mousedown',e=>e.preventDefault());
@@ -1877,9 +1918,22 @@ function bindEditor(){
     b.addEventListener('touchend',e=>{ if(!moved) pick(e); });
     b.addEventListener('click',pick);
   });
+  qAll('.wu-btn').forEach(b=>{
+    let moved=false;
+    const pickWu=e=>{
+      e.preventDefault();
+      _wuTouched=true; setWu(b.dataset.wu); haptic('light');
+      updateWeightEquiv(); updateSaleHint(); updateWeightTotal();
+    };
+    b.addEventListener('mousedown',e=>e.preventDefault());
+    b.addEventListener('touchstart',()=>{ moved=false; },{passive:true});
+    b.addEventListener('touchmove',()=>{ moved=true; },{passive:true});
+    b.addEventListener('touchend',e=>{ if(!moved) pickWu(e); });
+    b.addEventListener('click',pickWu);
+  });
   const wPriceInp=q('e-wprice');
   const wQtyInp=q('e-wqty');
-  if(wPriceInp){ wPriceInp.addEventListener('input',()=>{ updateWeightEquiv(); updateSaleHint(); updateDiscLabel(); updateWeightTotal(); }); }
+  if(wPriceInp){ wPriceInp.addEventListener('input',()=>{ _wExact=null; updateWeightEquiv(); updateSaleHint(); updateDiscLabel(); updateWeightTotal(); }); }
   if(wQtyInp){  wQtyInp.addEventListener('input',()=>{ updateWeightEquiv(); updateSaleHint(); updateWeightTotal(); }); }
   const ePriceInp=q('e-price');
   if(ePriceInp){ ePriceInp.addEventListener('input',()=>{ updateSaleHint(); updateDiscLabel(); }); }
@@ -1895,28 +1949,45 @@ function bindEditor(){
   });
 }
 
+function wPriceExact(){
+  const t=parseFloat(q('e-wprice')?.value)||0;
+  return (_wExact!=null && Math.abs(_wExact-t)<0.006) ? _wExact : t;
+}
+
+function setWu(unit){
+  _wu=unit;
+  qAll('.wu-btn').forEach(x=>x.classList.toggle('sel',x.dataset.wu===unit));
+}
+
+function weightInPriceUnit(def=0){
+  const raw=parseFloat(q('e-wqty')?.value);
+  if(!(raw>0)) return def;
+  if(_wu===_wt) return raw;
+  return _wt==='per_lb' ? raw/0.453592 : raw*0.453592;
+}
+
 function updateWeightEquiv(){
+  if(!_wuTouched) setWu(_wt);
   const el=q('e-w-equiv'); if(!el) return;
   const price=parseFloat(q('e-wprice')?.value)||0;
-  const lbl=q('e-wqty-label');
-  if(price<=0){
-    el.textContent='';
-    if(lbl) lbl.textContent='Weight (lb)';
-    return;
+  const lbl=q('e-wqty-label'); if(lbl) lbl.textContent='Weight ('+(_wt==='per_kg'?'kg':'lb')+')';
+  let txt='';
+  if(price>0){
+    txt=_wt==='per_lb'
+      ? `$${price.toFixed(2)}/lb = $${(price/0.453592).toFixed(2)}/kg`
+      : `$${price.toFixed(2)}/kg = $${(price*0.453592).toFixed(2)}/lb`;
   }
-  if(_wt==='per_lb'){
-    el.textContent=`$${price.toFixed(2)}/lb = $${(price/0.453592).toFixed(2)}/kg`;
-    if(lbl) lbl.textContent='Weight (lb)';
-  } else {
-    el.textContent=`$${price.toFixed(2)}/kg = $${(price*0.453592).toFixed(2)}/lb`;
-    if(lbl) lbl.textContent='Weight (kg)';
+  const raw=parseFloat(q('e-wqty')?.value)||0;
+  if(raw>0 && _wu!==_wt){
+    txt+=(txt?'  ·  ':'')+`${raw} ${_wu==='per_kg'?'kg':'lb'} = ${weightInPriceUnit(0).toFixed(3)} ${_wt==='per_kg'?'kg':'lb'}`;
   }
+  el.textContent=txt;
 }
 
 function updateWeightTotal(){
   const el=q('e-wtotal'); if(!el) return;
-  const price=parseFloat(q('e-wprice')?.value)||0;
-  const wt=parseFloat(q('e-wqty')?.value)||0;
+  const price=wPriceExact();
+  const wt=weightInPriceUnit(0);
   if(price<=0||wt<=0){ el.textContent=''; return; }
   el.textContent=`= $${(price*wt).toFixed(2)}`;
 }
@@ -1935,7 +2006,7 @@ function updateSaleHint(){
 
   const eachPrice=parseFloat(q('e-price')?.value)||0;
   const wPrice=parseFloat(q('e-wprice')?.value)||0;
-  const wQty=parseFloat(q('e-wqty')?.value)||1;
+  const wQty=Math.round(weightInPriceUnit(1)*1000)/1000;
   const unit=_wt==='per_kg'?'kg':'lb';
 
   // Conflict: both fields have values
@@ -1969,8 +2040,8 @@ async function doSaveItem(){
 
   const eachPrice=parseFloat(q('e-price')?.value)||0;
   const eachQty=parseFloat(q('e-qty')?.value)||1;
-  const wPrice=parseFloat(q('e-wprice')?.value)||0;
-  const wQty=parseFloat(q('e-wqty')?.value)||1;
+  const wPrice=Math.round(wPriceExact()*10000)/10000;
+  const wQty=Math.round(weightInPriceUnit(1)*1000)/1000;
 
   // Conflict guard: if both filled, weight wins — this matches the hint shown in the editor
   let finalPrice=0, finalPriceType='each', finalQty=1;
