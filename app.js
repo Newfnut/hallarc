@@ -1838,14 +1838,14 @@ function setupRegSwipe(wrap,rid,rname,btn,regularsArr){
 }
 
 // ─── Editor bindings ─────────────────────────
-let _sale=false, _wl=false, _reg=false, _wt='per_lb', _wu='per_lb', _wuTouched=false, _wExact=null, _saving=false;
+let _sale=false, _wl=false, _reg=false, _wt='per_lb', _wu='per_lb', _wuTouched=false, _wExact=null, _wqExact=null, _saving=false;
 
 function bindEditor(){
   _sale=(S.editorItem?.saleDiscount||0)>0;
   _wl=S.editorItem?.isWatchlist||false;
   _reg=S.editorItem?.isRegular||false;
   _wt=(S.editorItem?.priceType==='per_kg')?'per_kg':'per_lb';
-  _wu=_wt; _wuTouched=false; _wExact=null;
+  _wu=_wt; _wuTouched=false; _wExact=null; _wqExact=null;
 
   if(S.store?.type==='prescription') bindRxEditor();
   on('e-save-top','click',doSaveItem);
@@ -1906,7 +1906,7 @@ function bindEditor(){
           if(pi) pi.value=conv.toFixed(2);
         }
         const di=q('e-disc'); const d=parseFloat(di?.value)||0;
-        if(di && d>0) di.value=(next==='per_kg' ? d/0.453592 : d*0.453592).toFixed(2);
+        if(di&&d>0) di.value=(next==='per_kg'?d/0.453592:d*0.453592).toFixed(2); const wi=q('e-wqty'); const wv=wQtyExact(); if(wi&&wv>0){ const wc=next==='per_kg'?wv*0.453592:wv/0.453592; _wqExact=wc; wi.value=+wc.toFixed(2); }
       }
       qAll('.wt-btn').forEach(x=>x.classList.remove('sel'));
       b.classList.add('sel'); _wt=next; haptic('light');
@@ -1934,7 +1934,7 @@ function bindEditor(){
   const wPriceInp=q('e-wprice');
   const wQtyInp=q('e-wqty');
   if(wPriceInp){ wPriceInp.addEventListener('input',()=>{ _wExact=null; updateWeightEquiv(); updateSaleHint(); updateDiscLabel(); updateWeightTotal(); }); }
-  if(wQtyInp){  wQtyInp.addEventListener('input',()=>{ updateWeightEquiv(); updateSaleHint(); updateWeightTotal(); }); }
+  if(wQtyInp){  wQtyInp.addEventListener('input',()=>{ _wqExact=null; updateWeightEquiv(); updateSaleHint(); updateWeightTotal(); }); }
   const ePriceInp=q('e-price');
   if(ePriceInp){ ePriceInp.addEventListener('input',()=>{ updateSaleHint(); updateDiscLabel(); }); }
   const eDiscInp=q('e-disc');
@@ -1949,6 +1949,11 @@ function bindEditor(){
   });
 }
 
+function wQtyExact(){
+  const t=parseFloat(q('e-wqty')?.value)||0;
+  return (_wqExact!=null && Math.abs(_wqExact-t)<0.006) ? _wqExact : t;
+}
+
 function wPriceExact(){
   const t=parseFloat(q('e-wprice')?.value)||0;
   return (_wExact!=null && Math.abs(_wExact-t)<0.006) ? _wExact : t;
@@ -1960,7 +1965,7 @@ function setWu(unit){
 }
 
 function weightInPriceUnit(def=0){
-  const raw=parseFloat(q('e-wqty')?.value);
+  const raw=wQtyExact();
   if(!(raw>0)) return def;
   if(_wu===_wt) return raw;
   return _wt==='per_lb' ? raw/0.453592 : raw*0.453592;
@@ -1980,6 +1985,11 @@ function updateWeightEquiv(){
   const raw=parseFloat(q('e-wqty')?.value)||0;
   if(raw>0 && _wu!==_wt){
     txt+=(txt?'  ·  ':'')+`${raw} ${_wu==='per_kg'?'kg':'lb'} = ${weightInPriceUnit(0).toFixed(3)} ${_wt==='per_kg'?'kg':'lb'}`;
+  }
+  const wq=wQtyExact();
+  if(wq>0){
+    const other=_wt==='per_lb'?wq*0.453592:wq/0.453592;
+    txt+=(txt?'  ·  ':'')+`${+wq.toFixed(2)} ${_wt==='per_lb'?'lb':'kg'} = ${+other.toFixed(2)} ${_wt==='per_lb'?'kg':'lb'}`;
   }
   el.textContent=txt;
 }
