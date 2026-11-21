@@ -440,3 +440,4 @@ body{display:flex;justify-content:center;background:var(--bg)}
 #e-exp{width:100% !important;flex:1 1 auto !important;min-width:0 !important;box-sizing:border-box !important;-webkit-appearance:none;appearance:none}
 .wu-btn{flex:1;padding:7px 11px;font-size:13px;background:none;border:none;border-radius:0;color:var(--text-secondary);font-family:var(--font)}
 .wu-btn.sel{background:var(--accent-bg);color:var(--accent);font-weight:600}
+#e-wqty{width:104px;flex:0 0 104px}
